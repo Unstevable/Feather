@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <title>Feather</title>
+
+        <style>
+            html, body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            height: 100%;
+            }
+
+            #c {
+                width: 100%;
+                height: 100%;
+                display: block;
+            }
+        </style>
+    </head>
+    <body>
+        <canvas id="c"></canvas>
+
+        <script type="module">
+            // three.js imports
+            import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js";
+            import { OrbitControls } from "https://unpkg.com/three@0.160.0/examples/jsm/controls/OrbitControls.js?module";
+
+            // basic setup
+            let renderer, scene, camera, controls;
+            let birdGroup, birdBody, leftwing, rightwing;
+
+            // bird animation parameters
+            const clock = new THREE.Clock(); // clock to give elapsed time in seconds
+            const FLAP_SPEED = 4.0;
+            const FLAP_AMPLITUDE = Math.PI / 6; // max wing rotation angle
+            const BOB_SPEED = 1.5; // bobbing speed for bird
+            const BOB_AMPLITUDE = 0.1; // bobbing height
+
+            // store the "rest" position of the bird to animate around it
+            let baseLeftWingAngle = 0;
+            let baseRightWingAngle = 0;
+            let baseBirdHeight = 0;
+
+            // cloud variables
+            let clouds = [];
+            const NUM_CLOUDS = 40;
+            const CLOUD_MIN_Z = -10; // cloud closest z-range
+            const CLOUD_MAX_Z = -40; // cloud farthest z-range
+            const CLOUD_HEIGHT = 2.5; // typical cloud height
+            const CLOUD_SPREAD_X = 80; // how far clouds can appear to the left and right
+            const CLOUD_SPEED = 2.0;
+            let lastTime = 0; // for computing time diff between frames 
+
+            init();
+            animate();
+
+            function init() {
+                const canvas = document.getElementById("c");
+
+                // renderer
+                renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true});
+                renderer.setPixelRatio(window.devicePixelRatio);
+                renderer.setSize(window.innerWidth, window.innerHeight);
+                renderer.setClearColor(0x87ceeb, 1); // sky blue
+
+                // scene
+                scene = new THREE.Scene();
+
+                // adding fog to the scene for fading distant objects
+                scene.fog = new THREE.Fog(0x87ceeb, 10, 60);
+
+                // camera
+                const fov = 60;
+                const aspect = window.innerWidth / window.innerHeight;
+                const near = 0.1;
+                const far = 1000;
+                camera = new THREE.PerspectiveCamera(fov, aspect, near, far);
+                camera.position.set(0, 2, 6);
+                scene.add(camera);
+
+                // orbit controls (for debugging)
+                controls = new OrbitControls(camera, renderer.domElement);
+                controls.enableDamping = true;
+
+                // lights
+                const ambient = new THREE.AmbientLight(0xffffff, 0.3);
+                scene.add(ambient);
+
+                // directional light as the sun
+                const sunlight = new THREE.DirectionalLight(0xfff2cc, 1.0);
+                sunlight.position.set(5, 10, 5);
+                scene.add(sunlight);
+
+                // sun disc
+                const sunGeo = new THREE.SphereGeometry(1.5, 32, 16);
+                const sunMat = new THREE.MeshBasicMaterial({
+                    color: 0xfff7d1,
+                    emissive: 0xfff7d1, // glow
+                    emissiveIntensity: 1.0 // brightness of glow
+                })
+                const sunDisc = new THREE.Mesh(sunGeo, sunMat);
+                // position of the sun; far away in background
+                sunDisc.position.set(-15, 20, -30);
+                scene.add(sunDisc);
+
+                //=============== create clouds ===============
+                // build clouds at random positions in the sky
+                for (let i = 0; i < NUM_CLOUDS; i++){
+                    const cloud = createCloud(); // helper function
+                    scene.add(cloud);
+                    clouds.push(cloud);
+                }
+                //=============================================
+
+                //=============== bird geometry ===============
+                birdGroup = new THREE.Object3D();
+                const bodyGeo = new THREE.CapsuleGeometry(
+                    0.15, // radius of round part
+                    0.6, // length of cylindrical part
+                    8, // radial segments
+                    16 // height segments
+                );
+
+                const bodyMat = new THREE.MeshStandardMaterial({
+                    color: 0xffaa55, // warm orange
+                    metalness: 0.1, 
+                    roughness: 0.8
+                });
+
+                birdBody = new THREE.Mesh(bodyGeo, bodyMat);
+                // slight tilt to the body to mimic a bird in flight
+                birdBody.rotation.z = 0.1;
+                birdBody.rotation.x = -0.1;
+                birdGroup.add(birdBody);
+
+                // wings
+                const wingGeo = new THREE.BoxGeometry(
+                    0.9, // width
+                    0.05, // thickness
+                    0.25 // depth (front to back)
+                );
+
+                const wingMat = new THREE.MeshStandardMaterial({
+                    color: 0xffffff, // white wings
+                    metalness: 0.05, 
+                    roughness: 0.9
+                });
+
+                // left wing
+                leftwing = new THREE.Mesh(wingGeo, wingMat);
+                leftwing.position.set(-0.45, 0.05, 0); // position of wing so inner edge touches body
+                leftwing.rotation.z = Math.PI / 6; // slight upward angle so the wing forms an 'm'-like shape
+                birdGroup.add(leftwing);
+
+                // right wing
+                rightwing = new THREE.Mesh(wingGeo, wingMat);
+                rightwing.position.set(0.45, 0.05, 0); // mimic left wing
+                rightwing.rotation.z = -Math.PI / 6; // rotate opposite direction
+                birdGroup.add(rightwing);
+
+                // final bird placement
+                birdGroup.position.set(0, 0, 0);
+                scene.add(birdGroup);
+
+                // keep the initial rotation of each wing so the animation can add/subtract
+                // the flap angle on top of the base angle
+                baseLeftWingAngle = leftwing.rotation.z;
+                baseRightWingAngle = rightwing.rotation.z;
+
+                // store original height as well so bobbing is centered
+                baseBirdHeight = birdGroup.position.y;
+                //=============================================
+
+                // handle resize
+                window.addEventListener('resize', onWindowResize);
+            }
+
+            // function to create clouds
+            function createCloud() {
+                const cloud = new THREE.Object3D(); // parent object for puff meshes
+
+                // random # of puffs per cloud ( 3 - 5 )
+                const numPuffs = 3 + Math.floor(Math.random() * 3);
+
+                for (let i = 0; i < numPuffs; i++) {
+                    // slight varied radius fo each puff
+                    const radius = THREE.MathUtils.randFloat(0.3, 0.8);
+
+                    const geo = new THREE.SphereGeometry(radius, 16, 12);
+                    const mat = new THREE.MeshStandardMaterial({
+                        color: 0xffffff,
+                        roughness: 0.9,
+                        metalness: 0.0
+                    });
+                    const puff = new THREE.Mesh(geo, mat);
+
+                    // random offsets so the puffs aren't symmetric 
+                    puff.position.set(
+                        (Math.random() - 0.5) * 1.6, // left/right 
+                        (Math.random() - 0.5) * 0.4, // up/down 
+                        (Math.random() - 0.5) * 0.6 // front/back 
+                    );
+                    cloud.add(puff);
+                }
+
+                // position the entire cloud somewhere in the sky
+                cloud.position.set(
+                    (Math.random() - 0.5) * CLOUD_SPREAD_X, // x spread
+                    CLOUD_HEIGHT + (Math.random() - 0.5) * 1.5, // slight y variation
+                    THREE.MathUtils.randFloat(CLOUD_MIN_Z, CLOUD_MAX_Z) // random depth
+                );
+
+                cloud.scale.set(
+                    1.5 + Math.random() * 2.0, // width
+                    1.0 + Math.random() * 0.5, // height
+                    1.0 + Math.random() * 0.3 // depth
+                ); // slightly stretch cloud to get more of a cloud-effect
+
+                cloud.userData.speed = THREE.MathUtils.randFloat(0.5, 2.0); // each cloud moves at diff speeds
+                cloud.userData.dir = Math.random() < 0.5 ? -1 : 1; // left or right
+
+                return cloud;
+            }
+
+            function onWindowResize() {
+                camera.aspect = window.innerWidth / window.innerHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(window.innerWidth, window.innerHeight);
+            }
+
+            // animation loop
+            function animate() {
+                requestAnimationFrame(animate);
+
+                const t = clock.getElapsedTime(); // get time
+
+                // frame delta time
+                const delta = t - lastTime;
+                lastTime = t;
+
+                // sine wave for the wing flapping
+                const flapOffset = Math.sin(t * FLAP_SPEED) * FLAP_AMPLITUDE;
+
+                // animate wings
+                if (leftwing && rightwing){
+                    // the wings mirror each other based on their own angles
+                    // the flap offset lifts/drops the wing
+                    leftwing.rotation.z = baseLeftWingAngle + flapOffset;
+                    rightwing.rotation.z = baseRightWingAngle - flapOffset;
+                }
+
+                // gentle bobbing of the bird
+                if (birdGroup) {
+                    const bobOffset = Math.sin(t* BOB_SPEED) * BOB_AMPLITUDE;
+                    birdGroup.position.y = baseBirdHeight + bobOffset;
+                    birdGroup.rotation.y += 0.005; // small rotation so bird doesn't feel frozen
+                }
+
+                // cloud animation
+                if (clouds.length > 0) {
+                    for (const cloud of clouds){
+                        cloud.position.x += CLOUD_SPEED * delta; // drift slowly to the right
+
+                        // move cloud according to its own speed/direction
+                        cloud.position.x += cloud.userData.speed * cloud.userData.dir * delta;
+
+                        // wrap clouds moving right
+                        if (cloud.userData.dir > 0 && cloud.position.x > CLOUD_SPREAD_X * 0.5) {
+                            cloud.position.x = -CLOUD_SPREAD_X * 0.5;
+                        }
+
+                        // wrap clouds moving left
+                        if (cloud.userData.dir < 0 && cloud.position.x < -CLOUD_SPREAD_X * 0.5) {
+                            cloud.position.x = CLOUD_SPREAD_X * 0.5;
+                        }
+                    }
+                }
+
+                if (controls) controls.update();
+                renderer.render(scene, camera);
+            }
+        </script>
+    </body>
+</html>
