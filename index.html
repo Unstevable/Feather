@@ -53,6 +53,13 @@
             const CLOUD_SPEED = 2.0;
             let lastTime = 0; // for computing time diff between frames 
 
+            // rain variables
+            let rainGroup = null; // group to hold rain drops
+            const RAIN_COUNT = 500;
+            const RAIN_AREA_XZ = 40; // how wide/deep the rain area is
+            const RAIN_HEIGHT = 12; // how high above the scene raindrops start
+            let isRaining = false;
+
             init();
             animate();
 
@@ -111,6 +118,13 @@
                     const cloud = createCloud(); // helper function
                     scene.add(cloud);
                     clouds.push(cloud);
+                }
+                //=============================================
+
+                //=============== create rain ===============
+                createRain();
+                if (rainGroup) {
+                    rainGroup.visible = false; // start with no rain
                 }
                 //=============================================
 
@@ -175,6 +189,9 @@
 
                 // handle resize
                 window.addEventListener('resize', onWindowResize);
+
+                // listen for keypress to toggle rain
+                window.addEventListener('keydown', onKeyDown);
             }
 
             // function to create clouds
@@ -224,10 +241,59 @@
                 return cloud;
             }
 
+            // function for the rain
+            function createRain() {
+                rainGroup = new THREE.Group();
+                // buffer geometry to hold positions of all raindrops
+                const positions = new Float32Array(RAIN_COUNT * 3);
+
+                for (let i = 0; i < RAIN_COUNT; i++) {
+                    const idx = i * 3;
+                    // random x/z within a square area around origin
+                    positions[idx + 0] = (Math.random() - 0.5) * RAIN_AREA_XZ; // x
+                    positions[idx + 1] = Math.random() * RAIN_HEIGHT + 2; // y
+                    positions[idx + 2] = (Math.random() - 0.5) * RAIN_AREA_XZ; // z
+                }
+
+                const rainGeo = new THREE.BufferGeometry();
+                rainGeo.setAttribute(
+                    'position',
+                    new THREE.BufferAttribute(positions, 3)
+                );
+
+                const rainMat = new THREE.PointsMaterial({
+                    color: 0xffffff,
+                    size: 0.06,     // screen space size of each drop
+                    transparent: true,
+                    opacity: 0.9
+                })
+
+                const rainPoints = new THREE.Points(rainGeo, rainMat);
+                rainGroup.add(rainPoints);
+                scene.add(rainGroup);
+            }
+
             function onWindowResize() {
                 camera.aspect = window.innerWidth / window.innerHeight;
                 camera.updateProjectionMatrix();
                 renderer.setSize(window.innerWidth, window.innerHeight);
+            }
+
+            function onKeyDown(event) {
+                // toggle with r key
+                if (event.key === 'r' || event.key === 'R') {
+                    isRaining = !isRaining;
+                    // toggle rain visibility
+                    if (rainGroup) {
+                        rainGroup.visible = isRaining;
+                    }
+
+                    if (isRaining){
+                        renderer.setClearColor(0x6bb0d8, 1); // darker blue sky when raining
+                    } else {
+                        renderer.setClearColor(0x87ceeb, 1); // sky blue original
+                    }
+                }
             }
 
             // animation loop
@@ -276,6 +342,29 @@
                             cloud.position.x = CLOUD_SPREAD_X * 0.5;
                         }
                     }
+                }
+
+                // animate raindrops
+                if (isRaining && rainGroup) {
+                    const rainPoints = rainGroup.children[0];
+                    const positions = rainPoints.geometry.attributes.position.array;
+
+                    const RAIN_FALL_SPEED = 10.0;
+
+                    // move each drop down by speed * delta
+                    for (let i = 0; i < positions.length; i += 3) {
+                        positions[i + 1] -= RAIN_FALL_SPEED * delta; // i + 1 is the y position
+
+                        // if the rain falls below a certain height, respwn it at the top
+                        if (positions[i + 1] < 0) {
+                            positions[i + 1] = RAIN_HEIGHT;
+
+                            // randomize x/z slightly when respawning
+                            positions[i + 0] = (Math.random() - 0.5) * RAIN_AREA_XZ;
+                            positions[i + 2] = (Math.random() - 0.5) * RAIN_AREA_XZ;
+                        }
+                    }
+                    rainPoints.geometry.attributes.position.needsUpdate = true; // inform three.js of position changes
                 }
 
                 if (controls) controls.update();
