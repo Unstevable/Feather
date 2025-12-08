@@ -31,6 +31,12 @@
             let renderer, scene, camera, controls;
             let birdGroup, birdBody, leftwing, rightwing;
 
+            // audio variables
+            let audioListener, backgroundMusic; // audioListener are is the "ears" in the scene
+            let musicLoaded = false;
+            let musicVolume = 0.4;
+            let musicMuted = false;
+
             // bird animation parameters
             const clock = new THREE.Clock(); // clock to give elapsed time in seconds
             const FLAP_SPEED = 4.0;
@@ -63,6 +69,30 @@
             init();
             animate();
 
+            // keyboard control for bakcground music
+            window.addEventListener('keydown', (event) => {
+                if (!musicLoaded || !backgroundMusic) return;
+                // toggle with m key
+                if (event.key === 'm' || event.key === 'M') {
+                    // if the music is not playing and it is not muted, then begin playing the music
+                    if (!backgroundMusic.isPlaying && !musicMuted) {
+                        backgroundMusic.play();
+                        return;
+                    }
+                    // otherwise, mute the music
+                    musicMuted = !musicMuted;
+                    if (musicMuted) {
+                        backgroundMusic.setVolume(0);
+                    } else {
+                        backgroundMusic.setVolume(musicVolume);
+                        // if for some reason the music stopped, restart
+                        if (!backgroundMusic.isPlaying) {
+                            backgroundMusic.play();
+                        }
+                    }
+                }
+            });
+
             function init() {
                 const canvas = document.getElementById("c");
 
@@ -86,6 +116,27 @@
                 camera = new THREE.PerspectiveCamera(fov, aspect, near, far);
                 camera.position.set(0, 2, 6);
                 scene.add(camera);
+
+                // =============== audio setup ===============
+                audioListener = new THREE.AudioListener();
+                camera.add(audioListener);
+
+                backgroundMusic = new THREE.Audio(audioListener); // global audio object for background music
+                const audioLoader = new THREE.AudioLoader();
+                audioLoader.load(
+                    'audio/Nujabes-Feather.mp3',
+                    (buffer) => {
+                        backgroundMusic.setBuffer(buffer); // assign audio data
+                        backgroundMusic.setLoop(true);
+                        backgroundMusic.setVolume(musicVolume);
+                        musicLoaded = true;
+                    },
+                    undefined,
+                    (error) => {
+                        console.error("Error loading background music:", error);
+                    }
+                );
+                // ==========================================
 
                 // orbit controls (for debugging)
                 controls = new OrbitControls(camera, renderer.domElement);
