@@ -181,56 +181,103 @@
 
                 //=============== bird geometry ===============
                 birdGroup = new THREE.Object3D();
-                const bodyGeo = new THREE.CapsuleGeometry(
-                    0.15, // radius of round part
-                    0.6, // length of cylindrical part
-                    8, // radial segments
-                    16 // height segments
-                );
 
-                const bodyMat = new THREE.MeshStandardMaterial({
-                    color: 0xffaa55, // warm orange
-                    metalness: 0.1, 
-                    roughness: 0.8
+                const birdBodyMat = new THREE.MeshStandardMaterial({
+                    color: 0xffc46b, // warm orange
+                    metalness: 0.0,
+                    roughness: 0.9,
+                    flatShading: true
                 });
 
-                birdBody = new THREE.Mesh(bodyGeo, bodyMat);
-                // slight tilt to the body to mimic a bird in flight
-                birdBody.rotation.z = 0.1;
+                const birdWingMat = new THREE.MeshStandardMaterial({
+                    color: 0xf5f5f5, // light gray 
+                    metalness: 0.0,
+                    roughness: 0.95,
+                    flatShading: true
+                });
+
+                const birdBeakMat = new THREE.MeshStandardMaterial({
+                    color: 0xffaa33, // brighter orange
+                    metalness: 0.0,
+                    roughness: 0.8,
+                    flatShading: true
+                });
+
+                const bodyGeo = new THREE.CylinderGeometry(
+                    0.12, // top radius
+                    0.18, // bottom radius
+                    0.65, // height
+                    6 // radial segments
+                );
+                birdBody = new THREE.Mesh(bodyGeo, birdBodyMat);
+
+                // slight tilt so it simulates flying forward
+                birdBody.rotation.z = 0.15;
                 birdBody.rotation.x = -0.1;
+
+                // move body a bit "back" so there is room for the head
+                birdBody.position.set(0, 0, 0);
                 birdGroup.add(birdBody);
+
+                // head
+                const headGeo = new THREE.SphereGeometry(
+                    0.14, // radius
+                    6, // width segments
+                    6 // height segments
+                );
+                const head = new THREE.Mesh(headGeo, birdBodyMat);
+                // place near front/top of body
+                head.position.set(0, 0.38, 0.12);
+                birdGroup.add(head);
+
+                // beak
+                const beakGeo = new THREE.ConeGeometry(
+                    0.06, // radius
+                    0.18, // height
+                    5
+                );
+                const beak = new THREE.Mesh(beakGeo, birdBeakMat);
+                // rotate cone so it points forward along +z
+                beak.rotation.x = Math.PI / 2;
+                beak.position.set(0, 0.36, 0.28);
+                birdGroup.add(beak);
+
+                // tail
+                const tailGeo = new THREE.ConeGeometry(
+                    0.08,
+                    0.18,
+                    4
+                );
+                const tail = new THREE.Mesh(tailGeo, birdBodyMat);
+                // point tail backwards along -z
+                tail.rotation.x = -Math.PI / 2;
+                tail.position.set(0, -0.25, -0.25);
+                birdGroup.add(tail);
 
                 // wings
                 const wingGeo = new THREE.BoxGeometry(
                     0.9, // width
-                    0.05, // thickness
-                    0.25 // depth (front to back)
+                    0.08, // thickness
+                    0.3 // depth (front to back)
                 );
 
-                const wingMat = new THREE.MeshStandardMaterial({
-                    color: 0xffffff, // white wings
-                    metalness: 0.05, 
-                    roughness: 0.9
-                });
-
                 // left wing
-                leftwing = new THREE.Mesh(wingGeo, wingMat);
+                leftwing = new THREE.Mesh(wingGeo, birdWingMat);
                 leftwing.position.set(-0.45, 0.05, 0); // position of wing so inner edge touches body
-                leftwing.rotation.z = Math.PI / 6; // slight upward angle so the wing forms an 'm'-like shape
+                leftwing.rotation.z = Math.PI / 4; // approx 45 degree upward angle
                 birdGroup.add(leftwing);
 
                 // right wing
-                rightwing = new THREE.Mesh(wingGeo, wingMat);
+                rightwing = new THREE.Mesh(wingGeo, birdWingMat);
                 rightwing.position.set(0.45, 0.05, 0); // mimic left wing
-                rightwing.rotation.z = -Math.PI / 6; // rotate opposite direction
+                rightwing.rotation.z = -Math.PI / 4; // rotate opposite direction
                 birdGroup.add(rightwing);
 
                 // final bird placement
                 birdGroup.position.set(0, 0, 0);
                 scene.add(birdGroup);
 
-                // keep the initial rotation of each wing so the animation can add/subtract
-                // the flap angle on top of the base angle
+                // store initial rotation of each wing for reference of "rest" pose 
                 baseLeftWingAngle = leftwing.rotation.z;
                 baseRightWingAngle = rightwing.rotation.z;
 
