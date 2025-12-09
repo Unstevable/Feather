@@ -203,6 +203,20 @@
                     flatShading: true
                 });
 
+                const birdEyeMat = new THREE.MeshStandardMaterial({
+                    color: 0x222222,   // dark gray (almost black)
+                    metalness: 0.0,
+                    roughness: 0.4,
+                    flatShading: true
+                });
+
+                const birdFootMat = new THREE.MeshStandardMaterial({
+                    color: 0xd07a2b,   // slightly darker orange
+                    metalness: 0.0,
+                    roughness: 0.8,
+                    flatShading: true
+                });
+
                 const bodyGeo = new THREE.CylinderGeometry(
                     0.12, // top radius
                     0.18, // bottom radius
@@ -242,17 +256,71 @@
                 beak.position.set(0, 0.36, 0.28);
                 birdGroup.add(beak);
 
-                // tail
-                const tailGeo = new THREE.ConeGeometry(
-                    0.08,
-                    0.18,
+                // eyes
+                const eyeGeo = new THREE.SphereGeometry(
+                    0.03,  // tiny spheres
+                    4,
                     4
                 );
-                const tail = new THREE.Mesh(tailGeo, birdBodyMat);
-                // point tail backwards along -z
-                tail.rotation.x = -Math.PI / 2;
-                tail.position.set(0, -0.25, -0.25);
-                birdGroup.add(tail);
+
+                const leftEye = new THREE.Mesh(eyeGeo, birdEyeMat);
+                const rightEye = new THREE.Mesh(eyeGeo, birdEyeMat);
+
+                // Offset slightly to each side of the head.
+                leftEye.position.set(-0.10, 0.43, 0.13);
+                rightEye.position.set(0.10, 0.43, 0.13);
+                birdGroup.add(leftEye);
+                birdGroup.add(rightEye);
+
+                // tail
+                // two small triangles to feel like a stylized tail.
+                const tailGeo = new THREE.BoxGeometry(
+                    0.1,   // width
+                    0.02,  // thickness
+                    0.25   // length
+                );
+
+                const tailCenter = new THREE.Mesh(tailGeo, birdBodyMat);
+                tailCenter.position.set(0, -0.28, -0.27);
+                tailCenter.rotation.x = -Math.PI / 4;   // angle down a bit
+                birdGroup.add(tailCenter);
+
+                const tailLeft = new THREE.Mesh(tailGeo, birdBodyMat);
+                tailLeft.position.set(-0.05, -0.29, -0.26);
+                tailLeft.rotation.x = -Math.PI / 4;
+                tailLeft.rotation.z = 0.25;             // fan slightly left
+                birdGroup.add(tailLeft);
+
+                const tailRight = new THREE.Mesh(tailGeo, birdBodyMat);
+                tailRight.position.set(0.05, -0.29, -0.26);
+                tailRight.rotation.x = -Math.PI / 4;
+                tailRight.rotation.z = -0.25;           // fan slightly right
+                birdGroup.add(tailRight);
+
+                // feet
+                const footGeo = new THREE.ConeGeometry(
+                    0.03,
+                    0.12,
+                    4
+                );
+
+                const leftFoot = new THREE.Mesh(footGeo, birdFootMat);
+                const rightFoot = new THREE.Mesh(footGeo, birdFootMat);
+
+                // Rotate so the feet point slightly forward.
+                leftFoot.rotation.x = Math.PI / 2;
+                rightFoot.rotation.x = Math.PI / 2;
+
+                // lower & widen feet so they peek out from under the body
+                leftFoot.position.set(-0.07, -0.35, 0.03);
+                rightFoot.position.set(0.07, -0.35, 0.03);
+                // make the feet slightly larger so they read at a distance
+                leftFoot.scale.set(1.4, 1.4, 1.4);
+                rightFoot.scale.set(1.4, 1.4, 1.4);
+
+
+                birdGroup.add(leftFoot);
+                birdGroup.add(rightFoot);
 
                 // wings
                 const wingGeo = new THREE.BoxGeometry(
