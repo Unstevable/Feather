@@ -71,12 +71,18 @@
 
             // cloud variables
             let clouds = [];
-            const NUM_CLOUDS = 40;
-            const CLOUD_MIN_Z = -10; // cloud closest z-range
-            const CLOUD_MAX_Z = -40; // cloud farthest z-range
-            const CLOUD_HEIGHT = 2.5; // typical cloud height
+            const NUM_CLOUDS = 100;
+
+            let CLOUD_FAR_Z = -180;
+            let CLOUD_NEAR_Z = 0;
+
+            // const CLOUD_MIN_Z = -10; // cloud closest z-range
+            // const CLOUD_MAX_Z = -40; // cloud farthest z-range
+
+            const CLOUD_HEIGHT = 13.0; // typical cloud height
+            const CLOUD_HEIGHT_VARIATION = 50.0;
             const CLOUD_SPREAD_X = 80; // how far clouds can appear to the left and right
-            const CLOUD_SPEED = 2.0;
+            const CLOUD_SPEED_Z = 18.0;
             let lastTime = 0; // for computing time diff between frames 
 
             // rain variables
@@ -256,6 +262,7 @@
                     model.position.sub(center);
                     const scale = 2.0 / Math.max(size.x, size.y, size.z);
                     model.scale.setScalar(scale);
+                    model.rotation.y += 1.5;
 
                     // place bird where your scene expects it
                     const BIRD_HEIGHT = 13.0;
@@ -263,6 +270,11 @@
                     baseBirdHeight = birdGroup.position.y;
 
                     frameObject(birdGroup, camera, controls, 3.0);
+
+                    CLOUD_NEAR_Z = camera.position.z + 10;
+                    CLOUD_FAR_Z = camera.position.z - 220;
+
+                    for (const c of clouds) respawnCloud(c);
 
                     console.log("GLB loaded:", { size, center, scale });
                 },
@@ -312,8 +324,8 @@
                 // position the entire cloud somewhere in the sky
                 cloud.position.set(
                     (Math.random() - 0.5) * CLOUD_SPREAD_X, // x spread
-                    CLOUD_HEIGHT + (Math.random() - 0.5) * 1.5, // slight y variation
-                    THREE.MathUtils.randFloat(CLOUD_MIN_Z, CLOUD_MAX_Z) // random depth
+                    CLOUD_HEIGHT + (Math.random() - 0.5) * CLOUD_HEIGHT_VARIATION, // slight y variation
+                    THREE.MathUtils.randFloat(CLOUD_FAR_Z, CLOUD_NEAR_Z) // random depth
                 );
 
                 cloud.scale.set(
@@ -327,6 +339,22 @@
 
                 return cloud;
             }
+
+            function respawnCloud(cloud) {
+                cloud.position.x = (Math.random() - 0.5) * CLOUD_SPREAD_X;
+                cloud.position.y = baseBirdHeight + (Math.random() - 0.5) * CLOUD_HEIGHT_VARIATION;
+                cloud.position.z = CLOUD_FAR_Z;
+
+                cloud.scale.set(
+                    1.5 + Math.random() * 2.0,
+                    1.0 + Math.random() * 0.5,
+                    1.0 + Math.random() * 0.3
+                );
+
+                cloud.userData.speed = THREE.MathUtils.randFloat(0.5, 2.0);
+                cloud.userData.dir = Math.random() < 0.5 ? -1 : 1;
+            }
+
 
             // function for the rain
             function createRain() {
@@ -411,20 +439,28 @@
                 // cloud animation
                 if (clouds.length > 0) {
                     for (const cloud of clouds){
-                        cloud.position.x += CLOUD_SPEED * delta; // drift slowly to the right
 
-                        // move cloud according to its own speed/direction
-                        cloud.position.x += cloud.userData.speed * cloud.userData.dir * delta;
+                        cloud.position.z += CLOUD_SPEED_Z * delta * cloud.userData.speed;
 
-                        // wrap clouds moving right
-                        if (cloud.userData.dir > 0 && cloud.position.x > CLOUD_SPREAD_X * 0.5) {
-                            cloud.position.x = -CLOUD_SPREAD_X * 0.5;
+                        cloud.position.x += cloud.userData.dir * 0.8 * delta;
+
+                        if (cloud.position.z > CLOUD_NEAR_Z){
+                            respawnCloud(cloud);
                         }
+                        // cloud.position.x += CLOUD_SPEED * delta; // drift slowly to the right
 
-                        // wrap clouds moving left
-                        if (cloud.userData.dir < 0 && cloud.position.x < -CLOUD_SPREAD_X * 0.5) {
-                            cloud.position.x = CLOUD_SPREAD_X * 0.5;
-                        }
+                        // // move cloud according to its own speed/direction
+                        // cloud.position.x += cloud.userData.speed * cloud.userData.dir * delta;
+
+                        // // wrap clouds moving right
+                        // if (cloud.userData.dir > 0 && cloud.position.x > CLOUD_SPREAD_X * 0.5) {
+                        //     cloud.position.x = -CLOUD_SPREAD_X * 0.5;
+                        // }
+
+                        // // wrap clouds moving left
+                        // if (cloud.userData.dir < 0 && cloud.position.x < -CLOUD_SPREAD_X * 0.5) {
+                        //     cloud.position.x = CLOUD_SPREAD_X * 0.5;
+                        // }
                     }
                 }
 
