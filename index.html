@@ -41,7 +41,13 @@
 
             // basic setup
             let renderer, scene, camera, controls;
-            let birdGroup, birdBody, leftwing, rightwing;
+            let birdGroup, birdBody;
+            let modelRoot = null;
+            let leftwing = null;
+            let rightwing = null;
+            let baseLeftWingRoot = 0;
+            let baseRightWingRoot = 0;
+            let birdLoaded = false;
 
             // audio variables
             let audioListener, backgroundMusic; // audioListener are is the "ears" in the scene
@@ -54,7 +60,9 @@
             const FLAP_SPEED = 4.0;
             const FLAP_AMPLITUDE = Math.PI / 6; // max wing rotation angle
             const BOB_SPEED = 1.5; // bobbing speed for bird
-            const BOB_AMPLITUDE = 0.1; // bobbing height
+            const BOB_AMPLITUDE = 0.6; // bobbing height
+
+            
 
             // store the "rest" position of the bird to animate around it
             let baseLeftWingAngle = 0;
@@ -231,6 +239,28 @@
                     const model = gltf.scene;
                     birdGroup.add(model);
 
+                    modelRoot = model;
+                    birdLoaded = true;
+
+                    // try to find wings by name
+                    modelRoot.traverse((obj) => {
+                        const n = (obj.name || "").toLowerCase();
+
+                        if (!leftwing && n.includes("wing") && n.includes("left")) leftwing = obj;
+                        if (!rightwing && n.includes("wing") && n.includes("right")) rightwing = obj;
+                    });
+
+                    // if that fails, dump node names to pick the correct ones
+                    if (!leftwing || !rightwing){
+                        console.log("Wing search failed.  Node names in model: ");
+                        modelRoot.traverse((o) => { if (o.name) console.log(o.name); });
+                    } else {
+                        baseLeftWingRoot = leftwing.rotation.x;
+                        baseRightWingRoot = rightwing.rotation.x;
+
+                        console.log("Wings found: ", leftwing.name, rightwing.name);
+                    }
+
                     const box = new THREE.Box3().setFromObject(model);
                     const center = box.getCenter(new THREE.Vector3());
                     const size = box.getSize(new THREE.Vector3());
@@ -239,9 +269,6 @@
                     model.scale.setScalar(scale);
 
                     // place bird where your scene expects it
-                    birdGroup.position.set(0, 2, 0);
-                    baseBirdHeight = birdGroup.position.y;
-
                     const BIRD_HEIGHT = 13.0;
                     birdGroup.position.set(0, BIRD_HEIGHT, 0);
                     baseBirdHeight = birdGroup.position.y;
@@ -379,6 +406,18 @@
 
                 // sine wave for the wing flapping
                 const flapOffset = Math.sin(t * FLAP_SPEED) * FLAP_AMPLITUDE;
+
+                // ----- bird bobbing and flapping -----
+                if (birdLoaded && birdGroup) {
+                    const bob = Math.sin(t * BOB_SPEED) * BOB_AMPLITUDE;
+                    birdGroup.position.y = baseBirdHeight + bob;
+
+                }
+
+                if (leftwing && rightwing) {
+                    leftwing.rotation.x = baseLeftWingRoot + flapOffset;
+                    rightwing.rotation.x = baseRightWingRoot - flapOffset;
+                }
 
                 // cloud animation
                 if (clouds.length > 0) {
