@@ -234,7 +234,7 @@
 
                 const loader = new GLTFLoader();
                 loader.load(
-                "Flying_seagull.glb", 
+                "Seagull.glb", 
                 (gltf) => {
                     const model = gltf.scene;
                     birdGroup.add(model);
@@ -242,24 +242,13 @@
                     modelRoot = model;
                     birdLoaded = true;
 
-                    // try to find wings by name
-                    modelRoot.traverse((obj) => {
-                        const n = (obj.name || "").toLowerCase();
+                    // Find the wings
+                    leftwing = model.getObjectByName("Leftwing");
+                    rightwing = model.getObjectByName("Rightwing");
 
-                        if (!leftwing && n.includes("wing") && n.includes("left")) leftwing = obj;
-                        if (!rightwing && n.includes("wing") && n.includes("right")) rightwing = obj;
-                    });
+                    console.log("Leftwing:", leftwing);
+                    console.log("Rightwing:", rightwing);
 
-                    // if that fails, dump node names to pick the correct ones
-                    if (!leftwing || !rightwing){
-                        console.log("Wing search failed.  Node names in model: ");
-                        modelRoot.traverse((o) => { if (o.name) console.log(o.name); });
-                    } else {
-                        baseLeftWingRoot = leftwing.rotation.x;
-                        baseRightWingRoot = rightwing.rotation.x;
-
-                        console.log("Wings found: ", leftwing.name, rightwing.name);
-                    }
 
                     const box = new THREE.Box3().setFromObject(model);
                     const center = box.getCenter(new THREE.Vector3());

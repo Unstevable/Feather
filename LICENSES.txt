@@ -1,2 +1,4 @@
-Bird Poly Model (Bird.glb) by Poly by Google via Poly Pizza (https://poly.pizza/m/8Ph79kHbt9s).  Free download - I do not own and did not create the model.
 Flying seagull by Poly by Google [CC-BY] (https://creativecommons.org/licenses/by/3.0/) via Poly Pizza (https://poly.pizza/m/6Tpj_vcWP3f).  Free download - I do not own and did not create the model.
+NOTE: The file named "Flying_seagull.glb" is the original file left in this repository to give proper credit to Poly by Google.  However,
+I edited this file in Blender in order to separate the individual wings from the bird body, and I exported this new model as "Seagull.glb", so
+that way I could animate the bird as flying.
