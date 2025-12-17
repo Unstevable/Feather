@@ -18,14 +18,26 @@
                 display: block;
             }
         </style>
+        <!-- NEW: Import map so addons can resolve `import ... from 'three'` -->
+        <script type="importmap">
+        {
+        "imports": {
+            "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+            "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+        }
+        }
+        </script>
+
     </head>
     <body>
         <canvas id="c"></canvas>
 
         <script type="module">
             // three.js imports
-            import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js";
-            import { OrbitControls } from "https://unpkg.com/three@0.160.0/examples/jsm/controls/OrbitControls.js?module";
+            import * as THREE from "three";
+            import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+            import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+
 
             // basic setup
             let renderer, scene, camera, controls;
@@ -93,6 +105,33 @@
                 }
             });
 
+            function frameObject(object3D, camera, controls, offset = 1.25) {
+                const box = new THREE.Box3().setFromObject(object3D);
+                const size = box.getSize(new THREE.Vector3());
+                const center = box.getCenter(new THREE.Vector3());
+
+                // How far the camera needs to be to fit the object
+                const maxDim = Math.max(size.x, size.y, size.z);
+                const fov = THREE.MathUtils.degToRad(camera.fov);
+                let cameraZ = Math.abs((maxDim / 2) / Math.tan(fov / 2)) * offset;
+
+                // Put camera in front of the object (positive Z direction)
+                camera.position.set(center.x, center.y, center.z + cameraZ);
+
+                // Set near/far so it doesn't clip
+                camera.near = cameraZ / 100;
+                camera.far = cameraZ * 100;
+                camera.updateProjectionMatrix();
+
+                // Center the controls on the object
+                controls.target.copy(center);
+                controls.update();
+
+                // Make sure the camera is actually looking at the center
+                camera.lookAt(center);
+            }
+
+
             function init() {
                 const canvas = document.getElementById("c");
 
@@ -141,6 +180,8 @@
                 // orbit controls (for debugging)
                 controls = new OrbitControls(camera, renderer.domElement);
                 controls.enableDamping = true;
+                controls.target.set(0, 2, 0);
+                controls.update();
 
                 // lights
                 const ambient = new THREE.AmbientLight(0xffffff, 0.3);
@@ -153,7 +194,7 @@
 
                 // sun disc
                 const sunGeo = new THREE.SphereGeometry(1.5, 32, 16);
-                const sunMat = new THREE.MeshBasicMaterial({
+                const sunMat = new THREE.MeshStandardMaterial({
                     color: 0xfff7d1,
                     emissive: 0xfff7d1, // glow
                     emissiveIntensity: 1.0 // brightness of glow
@@ -180,177 +221,74 @@
                 //=============================================
 
                 //=============== bird geometry ===============
-                birdGroup = new THREE.Object3D();
+                //=============== bird geometry ===============
+                birdGroup = new THREE.Group();
+                scene.add(birdGroup);
 
-                const birdBodyMat = new THREE.MeshStandardMaterial({
-                    color: 0xffc46b, // warm orange
-                    metalness: 0.0,
-                    roughness: 0.9,
-                    flatShading: true
-                });
+                const loader = new GLTFLoader();
+                loader.load(
+                "Flying_seagull.glb", 
+                (gltf) => {
+                    const model = gltf.scene;
+                    birdGroup.add(model);
 
-                const birdWingMat = new THREE.MeshStandardMaterial({
-                    color: 0xf5f5f5, // light gray 
-                    metalness: 0.0,
-                    roughness: 0.95,
-                    flatShading: true
-                });
+                    // --- make it visible no matter what (debug-safe) ---
+                    // model.traverse((o) => {
+                    // if (!o.isMesh) return;
+                    // o.material = new THREE.MeshStandardMaterial({ color: 0xffffff });
+                    // o.material.needsUpdate = true;
+                    // o.castShadow = true;
+                    // o.receiveShadow = true;
+                    // });
 
-                const birdBeakMat = new THREE.MeshStandardMaterial({
-                    color: 0xffaa33, // brighter orange
-                    metalness: 0.0,
-                    roughness: 0.8,
-                    flatShading: true
-                });
+                    // --- center + scale it to a reasonable world size ---
+                    // const box = new THREE.Box3().setFromObject(model);
+                    // const size = new THREE.Vector3();
+                    // const center = new THREE.Vector3();
+                    // box.getSize(size);
+                    // box.getCenter(center);
+                    const box = new THREE.Box3().setFromObject(model);
+                    const center = box.getCenter(new THREE.Vector3());
+                    const size = box.getSize(new THREE.Vector3());
+                    model.position.sub(center);
+                    const scale = 2.0 / Math.max(size.x, size.y, size.z);
+                    model.scale.setScalar(scale);
 
-                const birdEyeMat = new THREE.MeshStandardMaterial({
-                    color: 0x222222,   // dark gray (almost black)
-                    metalness: 0.0,
-                    roughness: 0.4,
-                    flatShading: true
-                });
+                    // model.position.sub(center); // center at (0,0,0)
 
-                const birdFootMat = new THREE.MeshStandardMaterial({
-                    color: 0xd07a2b,   // slightly darker orange
-                    metalness: 0.0,
-                    roughness: 0.8,
-                    flatShading: true
-                });
+                    // const targetSize = 2.0; // tweak if you want
+                    // const maxDim = Math.max(size.x, size.y, size.z);
+                    // const scale = targetSize / maxDim;
+                    // model.scale.setScalar(scale);
 
-                const bodyGeo = new THREE.CylinderGeometry(
-                    0.12, // top radius
-                    0.18, // bottom radius
-                    0.65, // height
-                    6 // radial segments
-                );
-                birdBody = new THREE.Mesh(bodyGeo, birdBodyMat);
+                    // place bird where your scene expects it
+                    birdGroup.position.set(0, 2, 0);
+                    baseBirdHeight = birdGroup.position.y;
 
-                // slight tilt so it simulates flying forward
-                birdBody.rotation.z = 0.15;
-                birdBody.rotation.x = -0.1;
+                    frameObject(birdGroup, camera, controls, 1.35);
 
-                // move body a bit "back" so there is room for the head
-                birdBody.position.set(0, 0, 0);
-                birdGroup.add(birdBody);
+                    // aim camera/controls at it
+                    // controls.target.copy(birdGroup.position);
+                    // camera.position.set(0, 2.2, 8);
+                    // controls.update();
 
-                // head
-                const headGeo = new THREE.SphereGeometry(
-                    0.14, // radius
-                    6, // width segments
-                    6 // height segments
-                );
-                const head = new THREE.Mesh(headGeo, birdBodyMat);
-                // place near front/top of body
-                head.position.set(0, 0.38, 0.12);
-                birdGroup.add(head);
-
-                // beak
-                const beakGeo = new THREE.ConeGeometry(
-                    0.06, // radius
-                    0.18, // height
-                    5
-                );
-                const beak = new THREE.Mesh(beakGeo, birdBeakMat);
-                // rotate cone so it points forward along +z
-                beak.rotation.x = Math.PI / 2;
-                beak.position.set(0, 0.36, 0.28);
-                birdGroup.add(beak);
-
-                // eyes
-                const eyeGeo = new THREE.SphereGeometry(
-                    0.03,  // tiny spheres
-                    4,
-                    4
+                    console.log("GLB loaded:", { size, center, scale });
+                },
+                undefined,
+                (err) => console.error("GLB load error:", err)
                 );
 
-                const leftEye = new THREE.Mesh(eyeGeo, birdEyeMat);
-                const rightEye = new THREE.Mesh(eyeGeo, birdEyeMat);
-
-                // Offset slightly to each side of the head.
-                leftEye.position.set(-0.10, 0.43, 0.13);
-                rightEye.position.set(0.10, 0.43, 0.13);
-                birdGroup.add(leftEye);
-                birdGroup.add(rightEye);
-
-                // tail
-                // two small triangles to feel like a stylized tail.
-                const tailGeo = new THREE.BoxGeometry(
-                    0.1,   // width
-                    0.02,  // thickness
-                    0.25   // length
-                );
-
-                const tailCenter = new THREE.Mesh(tailGeo, birdBodyMat);
-                tailCenter.position.set(0, -0.28, -0.27);
-                tailCenter.rotation.x = -Math.PI / 4;   // angle down a bit
-                birdGroup.add(tailCenter);
-
-                const tailLeft = new THREE.Mesh(tailGeo, birdBodyMat);
-                tailLeft.position.set(-0.05, -0.29, -0.26);
-                tailLeft.rotation.x = -Math.PI / 4;
-                tailLeft.rotation.z = 0.25;             // fan slightly left
-                birdGroup.add(tailLeft);
-
-                const tailRight = new THREE.Mesh(tailGeo, birdBodyMat);
-                tailRight.position.set(0.05, -0.29, -0.26);
-                tailRight.rotation.x = -Math.PI / 4;
-                tailRight.rotation.z = -0.25;           // fan slightly right
-                birdGroup.add(tailRight);
-
-                // feet
-                const footGeo = new THREE.ConeGeometry(
-                    0.03,
-                    0.12,
-                    4
-                );
-
-                const leftFoot = new THREE.Mesh(footGeo, birdFootMat);
-                const rightFoot = new THREE.Mesh(footGeo, birdFootMat);
-
-                // Rotate so the feet point slightly forward.
-                leftFoot.rotation.x = Math.PI / 2;
-                rightFoot.rotation.x = Math.PI / 2;
-
-                // lower & widen feet so they peek out from under the body
-                leftFoot.position.set(-0.07, -0.35, 0.03);
-                rightFoot.position.set(0.07, -0.35, 0.03);
-                // make the feet slightly larger so they read at a distance
-                leftFoot.scale.set(1.4, 1.4, 1.4);
-                rightFoot.scale.set(1.4, 1.4, 1.4);
-
-
-                birdGroup.add(leftFoot);
-                birdGroup.add(rightFoot);
-
-                // wings
-                const wingGeo = new THREE.BoxGeometry(
-                    0.9, // width
-                    0.08, // thickness
-                    0.3 // depth (front to back)
-                );
-
-                // left wing
-                leftwing = new THREE.Mesh(wingGeo, birdWingMat);
-                leftwing.position.set(-0.45, 0.05, 0); // position of wing so inner edge touches body
-                leftwing.rotation.z = Math.PI / 4; // approx 45 degree upward angle
-                birdGroup.add(leftwing);
-
-                // right wing
-                rightwing = new THREE.Mesh(wingGeo, birdWingMat);
-                rightwing.position.set(0.45, 0.05, 0); // mimic left wing
-                rightwing.rotation.z = -Math.PI / 4; // rotate opposite direction
-                birdGroup.add(rightwing);
 
                 // final bird placement
-                birdGroup.position.set(0, 0, 0);
+                // birdGroup.position.set(0, 0, 0);
                 scene.add(birdGroup);
 
                 // store initial rotation of each wing for reference of "rest" pose 
-                baseLeftWingAngle = leftwing.rotation.z;
-                baseRightWingAngle = rightwing.rotation.z;
+                // baseLeftWingAngle = leftwing.rotation.z;
+                // baseRightWingAngle = rightwing.rotation.z;
 
                 // store original height as well so bobbing is centered
-                baseBirdHeight = birdGroup.position.y;
+                // baseBirdHeight = birdGroup.position.y;
                 //=============================================
 
                 // handle resize
@@ -476,19 +414,19 @@
                 const flapOffset = Math.sin(t * FLAP_SPEED) * FLAP_AMPLITUDE;
 
                 // animate wings
-                if (leftwing && rightwing){
-                    // the wings mirror each other based on their own angles
-                    // the flap offset lifts/drops the wing
-                    leftwing.rotation.z = baseLeftWingAngle + flapOffset;
-                    rightwing.rotation.z = baseRightWingAngle - flapOffset;
-                }
+                // if (leftwing && rightwing){
+                //     // the wings mirror each other based on their own angles
+                //     // the flap offset lifts/drops the wing
+                //     leftwing.rotation.z = baseLeftWingAngle + flapOffset;
+                //     rightwing.rotation.z = baseRightWingAngle - flapOffset;
+                // }
 
                 // gentle bobbing of the bird
-                if (birdGroup) {
-                    const bobOffset = Math.sin(t* BOB_SPEED) * BOB_AMPLITUDE;
-                    birdGroup.position.y = baseBirdHeight + bobOffset;
-                    birdGroup.rotation.y += 0.005; // small rotation so bird doesn't feel frozen
-                }
+                // if (birdGroup) {
+                //     const bobOffset = Math.sin(t* BOB_SPEED) * BOB_AMPLITUDE;
+                //     birdGroup.position.y = baseBirdHeight + bobOffset;
+                //     birdGroup.rotation.y += 0.005; // small rotation so bird doesn't feel frozen
+                // }
 
                 // cloud animation
                 if (clouds.length > 0) {
