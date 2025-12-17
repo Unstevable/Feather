@@ -221,7 +221,6 @@
                 //=============================================
 
                 //=============== bird geometry ===============
-                //=============== bird geometry ===============
                 birdGroup = new THREE.Group();
                 scene.add(birdGroup);
 
@@ -232,21 +231,6 @@
                     const model = gltf.scene;
                     birdGroup.add(model);
 
-                    // --- make it visible no matter what (debug-safe) ---
-                    // model.traverse((o) => {
-                    // if (!o.isMesh) return;
-                    // o.material = new THREE.MeshStandardMaterial({ color: 0xffffff });
-                    // o.material.needsUpdate = true;
-                    // o.castShadow = true;
-                    // o.receiveShadow = true;
-                    // });
-
-                    // --- center + scale it to a reasonable world size ---
-                    // const box = new THREE.Box3().setFromObject(model);
-                    // const size = new THREE.Vector3();
-                    // const center = new THREE.Vector3();
-                    // box.getSize(size);
-                    // box.getCenter(center);
                     const box = new THREE.Box3().setFromObject(model);
                     const center = box.getCenter(new THREE.Vector3());
                     const size = box.getSize(new THREE.Vector3());
@@ -254,23 +238,15 @@
                     const scale = 2.0 / Math.max(size.x, size.y, size.z);
                     model.scale.setScalar(scale);
 
-                    // model.position.sub(center); // center at (0,0,0)
-
-                    // const targetSize = 2.0; // tweak if you want
-                    // const maxDim = Math.max(size.x, size.y, size.z);
-                    // const scale = targetSize / maxDim;
-                    // model.scale.setScalar(scale);
-
                     // place bird where your scene expects it
                     birdGroup.position.set(0, 2, 0);
                     baseBirdHeight = birdGroup.position.y;
 
-                    frameObject(birdGroup, camera, controls, 1.35);
+                    const BIRD_HEIGHT = 13.0;
+                    birdGroup.position.set(0, BIRD_HEIGHT, 0);
+                    baseBirdHeight = birdGroup.position.y;
 
-                    // aim camera/controls at it
-                    // controls.target.copy(birdGroup.position);
-                    // camera.position.set(0, 2.2, 8);
-                    // controls.update();
+                    frameObject(birdGroup, camera, controls, 3.0);
 
                     console.log("GLB loaded:", { size, center, scale });
                 },
@@ -278,17 +254,8 @@
                 (err) => console.error("GLB load error:", err)
                 );
 
-
-                // final bird placement
-                // birdGroup.position.set(0, 0, 0);
                 scene.add(birdGroup);
 
-                // store initial rotation of each wing for reference of "rest" pose 
-                // baseLeftWingAngle = leftwing.rotation.z;
-                // baseRightWingAngle = rightwing.rotation.z;
-
-                // store original height as well so bobbing is centered
-                // baseBirdHeight = birdGroup.position.y;
                 //=============================================
 
                 // handle resize
@@ -412,21 +379,6 @@
 
                 // sine wave for the wing flapping
                 const flapOffset = Math.sin(t * FLAP_SPEED) * FLAP_AMPLITUDE;
-
-                // animate wings
-                // if (leftwing && rightwing){
-                //     // the wings mirror each other based on their own angles
-                //     // the flap offset lifts/drops the wing
-                //     leftwing.rotation.z = baseLeftWingAngle + flapOffset;
-                //     rightwing.rotation.z = baseRightWingAngle - flapOffset;
-                // }
-
-                // gentle bobbing of the bird
-                // if (birdGroup) {
-                //     const bobOffset = Math.sin(t* BOB_SPEED) * BOB_AMPLITUDE;
-                //     birdGroup.position.y = baseBirdHeight + bobOffset;
-                //     birdGroup.rotation.y += 0.005; // small rotation so bird doesn't feel frozen
-                // }
 
                 // cloud animation
                 if (clouds.length > 0) {
