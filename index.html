@@ -343,7 +343,7 @@
             function respawnCloud(cloud) {
                 cloud.position.x = (Math.random() - 0.5) * CLOUD_SPREAD_X;
                 cloud.position.y = baseBirdHeight + (Math.random() - 0.5) * CLOUD_HEIGHT_VARIATION;
-                cloud.position.z = CLOUD_FAR_Z;
+                cloud.position.z = THREE.MathUtils.randFloat(CLOUD_FAR_Z, CLOUD_FAR_Z + 120);
 
                 cloud.scale.set(
                     1.5 + Math.random() * 2.0,
@@ -353,6 +353,8 @@
 
                 cloud.userData.speed = THREE.MathUtils.randFloat(0.5, 2.0);
                 cloud.userData.dir = Math.random() < 0.5 ? -1 : 1;
+                cloud.userData.drift = THREE.MathUtils.randFloat(0.2, 1.2); // NEW
+
             }
 
 
@@ -442,7 +444,7 @@
 
                         cloud.position.z += CLOUD_SPEED_Z * delta * cloud.userData.speed;
 
-                        cloud.position.x += cloud.userData.dir * 0.8 * delta;
+                        cloud.position.x += cloud.userData.dir * cloud.userData.drift * delta;
 
                         if (cloud.position.z > CLOUD_NEAR_Z){
                             respawnCloud(cloud);
