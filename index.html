@@ -140,6 +140,32 @@
             const NIGHT_SKY = 0x03040a;
             const CLOUD_NIGHT = 0x2a2a2a;
 
+            const SUN_LIGHT_COLOR = 0xfff2cc;
+            const MOON_LIGHT_COLOR = 0xbfd9ff;   // cool moonlight tint
+
+            const MOON_CORE_COLOR = 0xe9f2ff;    // pale moon surface
+            const MOON_HALO_COLOR = { r: 185, g: 215, b: 255 }; // bluish glow
+
+            // shooting star vars
+            let shootingStars = [];
+            const SHOOTING_STAR_COUNT = 8;      // pool size
+            let shootingStarTimer = 0;
+
+            const SHOOTING = {
+                spawnChancePerSec: 1,          // made it high for more frequent shooting stars
+                minLife: 0.6,
+                maxLife: 1.2,
+                minLen: 80,
+                maxLen: 180,
+                minSpeed: 900,
+                maxSpeed: 1600,
+                yDirMin: 0.25,                    // keep above horizon
+                rMin: 1200,
+                rMax: 2600,
+            };
+
+
+
 
 
             init();
@@ -196,10 +222,11 @@
             }
 
             function makeRadialTexture(size = 256, stops = [
-                { t: 0.0, a: 1.9 },
-                { t: 0.4, a: 0.6 },
+                { t: 0.0, a: 1.0 },
+                { t: 0.5, a: 0.2 },
                 { t: 1.0, a: 0.0 },
-            ]) {
+            ], rgb = { r: 255, g: 247, b: 209 }) {
+
                 const canvas = document.createElement("canvas");
                 canvas.width = canvas.height = size;
                 const ctx = canvas.getContext("2d");
@@ -208,8 +235,10 @@
                 const r = size / 2;
 
                 const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
-                for (const s of stops) grad.addColorStop(s.t, `rgba(255,247,209,${s.a})`);
-                
+                for (const s of stops) {
+                    grad.addColorStop(s.t, `rgba(${rgb.r},${rgb.g},${rgb.b},${s.a})`);
+                }
+
                 ctx.fillStyle = grad;
                 ctx.fillRect(0, 0, size, size);
 
@@ -217,6 +246,7 @@
                 tex.colorSpace = THREE.SRGBColorSpace;
                 return tex;
             }
+
 
             function createSun(){
                 const sun = new THREE.Group();
@@ -279,6 +309,52 @@
                 return sun;
             }
 
+            function createMoon() {
+                const moon = new THREE.Group();
+
+                // moon "disc" (sphere looks fine at distance)
+                const coreGeo = new THREE.SphereGeometry(1.2, 32, 16);
+                const coreMat = new THREE.MeshStandardMaterial({
+                    color: MOON_CORE_COLOR,
+                    emissive: 0x111827,          // very subtle glow
+                    emissiveIntensity: 0.25,
+                    roughness: 0.95,
+                    metalness: 0.0,
+                    depthTest: false,
+                    depthWrite: false,
+                    fog: false,
+                });
+
+                const core = new THREE.Mesh(coreGeo, coreMat);
+                moon.add(core);
+
+                // halo (bluish, faint)
+                const haloTex = makeRadialTexture(256, [
+                    { t: 0.0, a: 0.22 },
+                    { t: 0.30, a: 0.12 },
+                    { t: 1.0, a: 0.0 },
+                ], MOON_HALO_COLOR);
+
+                const haloMat = new THREE.MeshBasicMaterial({
+                    map: haloTex,
+                    transparent: true,
+                    depthTest: false,
+                    depthWrite: false,
+                    fog: false,
+                    blending: THREE.AdditiveBlending,
+                });
+
+                const halo = new THREE.Mesh(new THREE.PlaneGeometry(10.0, 10.0), haloMat);
+                halo.renderOrder = -1002;
+                moon.add(halo);
+
+                moon.userData.billboard = [halo];
+                moon.renderOrder = -1001;
+                moon.visible = false; // start hidden until NIGHT
+                return moon;
+            }
+
+
 
             function init() {
                 const canvas = document.getElementById("c");
@@ -338,7 +414,7 @@
                 ambientLight = new THREE.AmbientLight(0xffffff, LIGHTS.clear.ambient);
                 scene.add(ambientLight);
 
-                sunLight = new THREE.DirectionalLight(0xfff2cc, LIGHTS.clear.sun);
+                sunLight = new THREE.DirectionalLight(SUN_LIGHT_COLOR, LIGHTS.clear.sun);
                 sunLight.position.set(5, 10, 5);
                 scene.add(sunLight);
 
@@ -349,10 +425,16 @@
                 sun.position.set(-15, 20, -30);
                 scene.add(sun);
                 window.__sun = sun;
+
+                const moon = createMoon();
+                moon.position.set(18, 22, -40);
+                scene.add(moon);
+                window.__moon = moon;
                 
                 // create stars for night mode
                 stars = createStars(5000);
                 scene.add(stars);
+                initShootingStars();
 
                 //=============== create clouds ===============
                 // build clouds at random positions in the sky
@@ -700,6 +782,89 @@
                 return pts;
             }
 
+            function makeShootingStar() {
+                // A shooting star is just a 2-point line segment (tail -> head)
+                const geo = new THREE.BufferGeometry();
+                const positions = new Float32Array(2 * 3); // 2 vertices
+                geo.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+
+                const mat = new THREE.LineBasicMaterial({
+                    color: 0xffffff,
+                    transparent: true,
+                    opacity: 0.0,
+                    depthTest: false,
+                    depthWrite: false,
+                    fog: false,
+                });
+
+                const line = new THREE.Line(geo, mat);
+                line.visible = false;
+                line.frustumCulled = false;
+
+                // runtime state
+                line.userData.active = false;
+                line.userData.life = 0;
+                line.userData.age = 0;
+                line.userData.speed = 0;
+                line.userData.len = 0;
+                line.userData.pos = new THREE.Vector3();
+                line.userData.vel = new THREE.Vector3();
+
+                return line;
+            }
+
+            function initShootingStars() {
+                shootingStars = [];
+                for (let i = 0; i < SHOOTING_STAR_COUNT; i++) {
+                    const s = makeShootingStar();
+                    shootingStars.push(s);
+                    scene.add(s);
+                }
+            }
+
+            function randomSkyPointAboveHorizon() {
+                // Similar to your star distribution: pick a direction with y >= SHOOTING.yDirMin
+                const theta = Math.random() * Math.PI * 2;
+
+                const yDir = THREE.MathUtils.lerp(SHOOTING.yDirMin, 1.0, Math.random());
+                const rXZ = Math.sqrt(1 - yDir * yDir);
+
+                const xDir = rXZ * Math.cos(theta);
+                const zDir = rXZ * Math.sin(theta);
+
+                const r = THREE.MathUtils.randFloat(SHOOTING.rMin, SHOOTING.rMax);
+
+                return new THREE.Vector3(xDir * r, yDir * r, zDir * r);
+            }
+
+            function spawnShootingStar() {
+                // Find an inactive star in the pool
+                const s = shootingStars.find(ss => !ss.userData.active);
+                if (!s) return;
+
+                s.userData.active = true;
+                s.userData.age = 0;
+                s.userData.life = THREE.MathUtils.randFloat(SHOOTING.minLife, SHOOTING.maxLife);
+                s.userData.speed = THREE.MathUtils.randFloat(SHOOTING.minSpeed, SHOOTING.maxSpeed);
+                s.userData.len = THREE.MathUtils.randFloat(SHOOTING.minLen, SHOOTING.maxLen);
+
+                // start point in the sky
+                s.userData.pos.copy(randomSkyPointAboveHorizon());
+
+                // choose a direction: generally "down-right" across the sky
+                // (tweak these ranges for a different vibe)
+                const dir = new THREE.Vector3(
+                    THREE.MathUtils.randFloat(0.6, 1.0),
+                    THREE.MathUtils.randFloat(-0.6, -0.2),
+                    THREE.MathUtils.randFloat(-0.4, 0.4)
+                ).normalize();
+
+                s.userData.vel.copy(dir).multiplyScalar(s.userData.speed);
+
+                s.visible = true;
+            }
+
+
             function applyWeather(mode){
                 weatherMode = mode;
 
@@ -735,9 +900,21 @@
                     m.color.setHex(cloudColor);
                 }
 
+                const nightOn = (mode === WEATHER.NIGHT);
+
                 // toggle stars + sun
-                if (stars) stars.visible = (mode === WEATHER.NIGHT);
+                if (stars) stars.visible = nightOn;
+                // toggle shooting stars visibility (only meaningful at night)
+                for (const s of shootingStars) {
+                    s.visible = false;
+                    s.userData.active = false;
+                    s.material.opacity = 0.0;
+                }
+
                 if (window.__sun) window.__sun.visible = (mode !== WEATHER.NIGHT);
+                if (window.__moon) window.__moon.visible = nightOn;
+
+                sunLight.color.setHex(nightOn ? MOON_LIGHT_COLOR : SUN_LIGHT_COLOR);
             }
 
             function onWindowResize() {
@@ -894,16 +1071,68 @@
                 animateTornado(t);
 
                 // keep sun halos facing camera
-                if (window.__sun) {
-                    for (const p of window.__sun.userData.billboard){
+                // if (window.__sun) {
+                //     for (const p of window.__sun.userData.billboard){
+                //         p.quaternion.copy(camera.quaternion);
+                //     }
+                // }
+                // keep sun + moon halos facing camera
+                for (const obj of [window.__sun, window.__moon]) {
+                    if (!obj || !obj.userData.billboard) continue;
+                    for (const p of obj.userData.billboard) {
                         p.quaternion.copy(camera.quaternion);
                     }
                 }
+
 
                 // twinkle the stars
                 if (stars && stars.visible) {
                     stars.material.opacity = 0.75 + 0.20 * Math.sin(t * 0.8);
                 }
+                // shooting stars (night only)
+                if (precipMode === "night") {
+                    // probabilistic spawn: chance per second
+                    if (Math.random() < SHOOTING.spawnChancePerSec * delta) {
+                        spawnShootingStar();
+                    }
+
+                    for (const s of shootingStars) {
+                        if (!s.userData.active) continue;
+
+                        s.userData.age += delta;
+
+                        // fade in/out over lifetime
+                        const u = s.userData.age / s.userData.life; // 0..1
+                        const fadeIn = Math.min(1, u / 0.15);
+                        const fadeOut = Math.min(1, (1 - u) / 0.25);
+                        s.material.opacity = 0.9 * Math.min(fadeIn, fadeOut);
+
+                        // move head along velocity
+                        s.userData.pos.addScaledVector(s.userData.vel, delta);
+
+                        // update line geometry: tail behind head
+                        const head = s.userData.pos;
+                        const tail = head.clone().addScaledVector(s.userData.vel, -s.userData.len / s.userData.speed);
+
+                        const posAttr = s.geometry.attributes.position;
+                        const arr = posAttr.array;
+
+                        // tail
+                        arr[0] = tail.x; arr[1] = tail.y; arr[2] = tail.z;
+                        // head
+                        arr[3] = head.x; arr[4] = head.y; arr[5] = head.z;
+
+                        posAttr.needsUpdate = true;
+
+                        // end of life
+                        if (s.userData.age >= s.userData.life) {
+                        s.userData.active = false;
+                        s.material.opacity = 0.0;
+                        s.visible = false;
+                        }
+                    }
+                }
+
 
                 if (controls) controls.update();
                 renderer.render(scene, camera);
