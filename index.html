@@ -71,13 +71,12 @@
 
             // cloud variables
             let clouds = [];
-            const NUM_CLOUDS = 100;
+            const NUM_CLOUDS = 500;
+            
+            const cloudMats = [];
 
             let CLOUD_FAR_Z = -180;
             let CLOUD_NEAR_Z = 0;
-
-            // const CLOUD_MIN_Z = -10; // cloud closest z-range
-            // const CLOUD_MAX_Z = -40; // cloud farthest z-range
 
             const CLOUD_HEIGHT = 13.0; // typical cloud height
             const CLOUD_HEIGHT_VARIATION = 50.0;
@@ -86,11 +85,34 @@
             let lastTime = 0; // for computing time diff between frames 
 
             // rain variables
-            let rainGroup = null; // group to hold rain drops
+            let precipMode = "none"; // none || snow || rain
+            let snowGroup = null;
+            let rainGroup = null;
             const RAIN_COUNT = 500;
             const RAIN_AREA_XZ = 40; // how wide/deep the rain area is
             const RAIN_HEIGHT = 12; // how high above the scene raindrops start
             let isRaining = false;
+
+            const WEATHER = { CLEAR: "clear", RAIN: "rain", SNOW: "snow" };
+            let weatherMode = WEATHER.CLEAR;
+
+            let ambientLight, sunLight;
+
+            const CLEAR_SKY = 0x87ceeb;
+            const RAIN_SKY = 0x5f7f95;
+            const SNOW_SKY = 0x7fb6d4;
+            const CLOUD_CLEAR = 0xffffff;
+            const CLOUD_SNOW = 0xd6d6d6;
+            const CLOUD_RAIN = 0x6a6a6a;
+            const CLOUD_OPACITY = 0.7;
+
+            const LIGHTS = {
+                clear: { ambient: 0.30, sun: 1.00 },
+                snow: { ambient: 0.22, sun: 0.80 },
+                rain: { ambient: 0.15, sun: 0.65 },
+            };
+
+
 
             init();
             animate();
@@ -198,13 +220,14 @@
                 controls.update();
 
                 // lights
-                const ambient = new THREE.AmbientLight(0xffffff, 0.3);
-                scene.add(ambient);
+                ambientLight = new THREE.AmbientLight(0xffffff, LIGHTS.clear.ambient);
+                scene.add(ambientLight);
 
-                // directional light as the sun
-                const sunlight = new THREE.DirectionalLight(0xfff2cc, 1.0);
-                sunlight.position.set(5, 10, 5);
-                scene.add(sunlight);
+                sunLight = new THREE.DirectionalLight(0xfff2cc, LIGHTS.clear.sun);
+                sunLight.position.set(5, 10, 5);
+                scene.add(sunLight);
+
+                applyWeather(WEATHER.CLEAR);
 
                 // sun disc
                 const sunGeo = new THREE.SphereGeometry(1.5, 32, 16);
@@ -227,11 +250,14 @@
                 }
                 //=============================================
 
-                //=============== create rain ===============
-                createRain();
-                if (rainGroup) {
-                    rainGroup.visible = false; // start with no rain
+                //=============== create snow ===============
+                createSnow();
+                if (snowGroup) {
+                    snowGroup.visible = false; // start with no snow
                 }
+                //=============================================
+                //=============== create rain =================
+                createRain();
                 //=============================================
 
                 //=============== bird geometry ===============
@@ -306,10 +332,13 @@
 
                     const geo = new THREE.SphereGeometry(radius, 16, 12);
                     const mat = new THREE.MeshStandardMaterial({
-                        color: 0xffffff,
+                        color: CLOUD_CLEAR,
                         roughness: 0.9,
-                        metalness: 0.0
+                        metalness: 0.0,
+                        transparent: true,
+                        opacity: CLOUD_OPACITY
                     });
+                    cloudMats.push(mat);
                     const puff = new THREE.Mesh(geo, mat);
 
                     // random offsets so the puffs aren't symmetric 
@@ -358,9 +387,9 @@
             }
 
 
-            // function for the rain
-            function createRain() {
-                rainGroup = new THREE.Group();
+            // function for the snow
+            function createSnow() {
+                snowGroup = new THREE.Group();
                 // buffer geometry to hold positions of all raindrops
                 const positions = new Float32Array(RAIN_COUNT * 3);
 
@@ -372,22 +401,97 @@
                     positions[idx + 2] = (Math.random() - 0.5) * RAIN_AREA_XZ; // z
                 }
 
-                const rainGeo = new THREE.BufferGeometry();
-                rainGeo.setAttribute(
+                const snowGeo = new THREE.BufferGeometry();
+                snowGeo.setAttribute(
                     'position',
                     new THREE.BufferAttribute(positions, 3)
                 );
 
-                const rainMat = new THREE.PointsMaterial({
+                const snowMat = new THREE.PointsMaterial({
                     color: 0xffffff,
-                    size: 0.06,     // screen space size of each drop
+                    size: 0.06,     // screen space size of each snowflake
                     transparent: true,
                     opacity: 0.9
                 })
 
-                const rainPoints = new THREE.Points(rainGeo, rainMat);
-                rainGroup.add(rainPoints);
+                const snowPoints = new THREE.Points(snowGeo, snowMat);
+                snowGroup.add(snowPoints);
+                scene.add(snowGroup);
+            }
+
+            function createRain(){
+                rainGroup = new THREE.Group();
+
+                // each raindrop has two vertices, a start and end point
+                const rainPositions = new Float32Array(RAIN_COUNT * 2 * 3);
+                const speeds = new Float32Array(RAIN_COUNT);
+                const lengths = new Float32Array(RAIN_COUNT);
+
+                for (let i = 0; i < RAIN_COUNT; i++){
+                    const x = (Math.random() - 0.5) * RAIN_AREA_XZ;
+                    const y = Math.random() * RAIN_HEIGHT + 2;
+                    const z = (Math.random() - 0.5) * RAIN_AREA_XZ;
+
+                    speeds[i] = THREE.MathUtils.randFloat(18, 35); // faster than the snow
+                    lengths[i] = THREE.MathUtils.randFloat(0.6, 1.6); // longer streak to more clearly identify as rain
+
+                    // starting vertex
+                    rainPositions[i * 6 + 0] = x;
+                    rainPositions[i * 6 + 1] = y;
+                    rainPositions[i * 6 + 2] = z;
+
+                    // end vertex
+                    rainPositions[i * 6 + 3] = x;
+                    rainPositions[i * 6 + 4] = y;
+                    rainPositions[i * 6 + 5] = z;
+                }
+
+                const rainGeo = new THREE.BufferGeometry();
+                rainGeo.setAttribute("position", new THREE.BufferAttribute(rainPositions, 3));
+
+                const rainMat = new THREE.LineBasicMaterial({
+                    color: 0xddeeff,
+                    transparent: true,
+                    opacity: 0.65
+                });
+
+                const lines = new THREE.LineSegments(rainGeo, rainMat);
+                rainGroup.add(lines);
+
+                rainGroup.userData.speeds = speeds;
+                rainGroup.userData.lengths = lengths;
+                rainGroup.visible = false;
                 scene.add(rainGroup);
+            }
+
+            function applyWeather(mode){
+                weatherMode = mode;
+
+                // pick colors for the clouds and sky
+                let skyColor = CLEAR_SKY;
+                let cloudColor = CLOUD_CLEAR;
+
+                if (mode === WEATHER.RAIN) {
+                    skyColor = RAIN_SKY;
+                    cloudColor = CLOUD_RAIN;
+                } else if (mode === WEATHER.SNOW) {
+                    skyColor = SNOW_SKY;
+                    cloudColor = CLOUD_SNOW;
+                }
+
+                // sky + fog match
+                renderer.setClearColor(skyColor, 1);
+                scene.fog.color.setHex(skyColor);
+
+                // lighting
+                const L = LIGHTS[mode];
+                ambientLight.intensity = L.ambient;
+                sunLight.intensity = L.sun;
+
+                // clouds recolor
+                for (const m of cloudMats){
+                    m.color.setHex(cloudColor);
+                }
             }
 
             function onWindowResize() {
@@ -397,20 +501,28 @@
             }
 
             function onKeyDown(event) {
-                // toggle with r key
-                if (event.key === 'r' || event.key === 'R') {
-                    isRaining = !isRaining;
-                    // toggle rain visibility
-                    if (rainGroup) {
-                        rainGroup.visible = isRaining;
-                    }
+                const k = event.key.toLowerCase();
 
-                    if (isRaining){
-                        renderer.setClearColor(0x6bb0d8, 1); // darker blue sky when raining
-                    } else {
-                        renderer.setClearColor(0x87ceeb, 1); // sky blue original
-                    }
+                // rain with 'r'
+                if (k === "r") {
+                    precipMode = (precipMode === "rain") ? "none" : "rain";
                 }
+                // snow with 's'
+                if (k === "s") {
+                    precipMode = (precipMode === "snow") ? "none" : "snow";
+                }
+
+                if (snowGroup) snowGroup.visible = (precipMode === "snow");
+                if (rainGroup) rainGroup.visible = (precipMode === "rain");
+
+                if (precipMode === "rain") {
+                    applyWeather(WEATHER.RAIN);
+                } else if (precipMode === "snow") {
+                    applyWeather(WEATHER.SNOW);
+                } else {
+                    applyWeather(WEATHER.CLEAR);
+                }
+
             }
 
             // animation loop
@@ -449,35 +561,21 @@
                         if (cloud.position.z > CLOUD_NEAR_Z){
                             respawnCloud(cloud);
                         }
-                        // cloud.position.x += CLOUD_SPEED * delta; // drift slowly to the right
-
-                        // // move cloud according to its own speed/direction
-                        // cloud.position.x += cloud.userData.speed * cloud.userData.dir * delta;
-
-                        // // wrap clouds moving right
-                        // if (cloud.userData.dir > 0 && cloud.position.x > CLOUD_SPREAD_X * 0.5) {
-                        //     cloud.position.x = -CLOUD_SPREAD_X * 0.5;
-                        // }
-
-                        // // wrap clouds moving left
-                        // if (cloud.userData.dir < 0 && cloud.position.x < -CLOUD_SPREAD_X * 0.5) {
-                        //     cloud.position.x = CLOUD_SPREAD_X * 0.5;
-                        // }
                     }
                 }
 
-                // animate raindrops
-                if (isRaining && rainGroup) {
-                    const rainPoints = rainGroup.children[0];
-                    const positions = rainPoints.geometry.attributes.position.array;
+                // animate snow
+                if (precipMode === "snow" && snowGroup) {
+                    const snowPoints = snowGroup.children[0];
+                    const positions = snowPoints.geometry.attributes.position.array;
 
                     const RAIN_FALL_SPEED = 10.0;
 
-                    // move each drop down by speed * delta
+                    // move each flake down by speed * delta
                     for (let i = 0; i < positions.length; i += 3) {
                         positions[i + 1] -= RAIN_FALL_SPEED * delta; // i + 1 is the y position
 
-                        // if the rain falls below a certain height, respwn it at the top
+                        // if the snow falls below a certain height, respwn it at the top
                         if (positions[i + 1] < 0) {
                             positions[i + 1] = RAIN_HEIGHT;
 
@@ -486,7 +584,49 @@
                             positions[i + 2] = (Math.random() - 0.5) * RAIN_AREA_XZ;
                         }
                     }
-                    rainPoints.geometry.attributes.position.needsUpdate = true; // inform three.js of position changes
+                    snowPoints.geometry.attributes.position.needsUpdate = true; // inform three.js of position changes
+                }
+
+                // animate rain
+                if (precipMode === "rain" && rainGroup){
+                    const lines = rainGroup.children[0];
+                    const posAttr = lines.geometry.attributes.position;
+                    const positions = posAttr.array;
+
+                    const speeds = rainGroup.userData.speeds;
+                    const lengths = rainGroup.userData.lengths;
+
+                    // wind
+                    const windX = 1.5;
+
+                    for (let i = 0; i < RAIN_COUNT; i++){
+                        const base = i * 6;
+
+                        positions[base + 1] -= speeds[i] * delta;
+
+                        // apply slight sideways wind to both endpoints
+                        positions[base + 0] += windX * delta;
+                        positions[base + 3] += windX * delta;
+
+                        // endpoint follows
+                        positions[base + 4] = positions[base + 1] - lengths[i];
+
+                        // respawn if below a certain point
+                        if (positions[base + 1] < 0) {
+                            const x = (Math.random() - 0.5) * RAIN_AREA_XZ;
+                            const y = RAIN_HEIGHT;
+                            const z = (Math.random() - 0.5) * RAIN_AREA_XZ;
+
+                            positions[base + 0] = x;
+                            positions[base + 1] = y;
+                            positions[base + 2] = z;
+
+                            positions[base + 3] = x;
+                            positions[base + 4] = y - lengths[i];
+                            positions[base + 5] = z;
+                        }
+                    }
+                    posAttr.needsUpdate = true;
                 }
 
                 if (controls) controls.update();
