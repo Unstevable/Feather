@@ -93,7 +93,20 @@
             const RAIN_HEIGHT = 12; // how high above the scene raindrops start
             let isRaining = false;
 
-            const WEATHER = { CLEAR: "clear", RAIN: "rain", SNOW: "snow" };
+            // tornado variables
+            let tornadoGroup = null;
+            const TORNADO = {
+                LAYERS: 34,
+                HEIGHT: 26,
+                BASE_RADIUS: 1.0,
+                TOP_RADIUS: 7.0,
+                THICKNESS: 0.22,
+                OPACITY: 0.18,
+                SEGMENTS: 32,
+                POS: new THREE.Vector3(28, 0, -25)
+            };
+
+            const WEATHER = { CLEAR: "clear", RAIN: "rain", SNOW: "snow", TORNADO: "tornado" };
             let weatherMode = WEATHER.CLEAR;
 
             let ambientLight, sunLight;
@@ -101,15 +114,18 @@
             const CLEAR_SKY = 0x87ceeb;
             const RAIN_SKY = 0x5f7f95;
             const SNOW_SKY = 0x7fb6d4;
+            const TORNADO_SKY = 0x808080;
             const CLOUD_CLEAR = 0xffffff;
             const CLOUD_SNOW = 0xd6d6d6;
             const CLOUD_RAIN = 0x6a6a6a;
+            const CLOUD_TORNADO = 0x808080;
             const CLOUD_OPACITY = 0.7;
 
             const LIGHTS = {
                 clear: { ambient: 0.30, sun: 1.00 },
                 snow: { ambient: 0.22, sun: 0.80 },
                 rain: { ambient: 0.15, sun: 0.65 },
+                tornado: { ambient: 0.18, sun: 0.55 },
             };
 
 
@@ -258,6 +274,9 @@
                 //=============================================
                 //=============== create rain =================
                 createRain();
+                //=============================================
+                //=============== create tornado =================
+                createTornado();
                 //=============================================
 
                 //=============== bird geometry ===============
@@ -464,6 +483,69 @@
                 scene.add(rainGroup);
             }
 
+            function createTornado() {
+                tornadoGroup = new THREE.Group();
+
+                const layers = TORNADO.LAYERS;
+                const h = TORNADO.HEIGHT;
+
+                // shared material
+                const mat = new THREE.MeshBasicMaterial({
+                    color: 0xe7e7e7,
+                    transparent: true,
+                    opacity: TORNADO.OPACITY,
+                    depthWrite: false, // helps translucent stacking look nicer
+                });
+
+                for (let i = 0; i < layers; i++) {
+                    const t = i / (layers - 1);
+                    const y = t * h;
+
+                    // the radius grows as you go higher
+                    const r = THREE.MathUtils.lerp(TORNADO.BASE_RADIUS, TORNADO.TOP_RADIUS, t);
+                    const thickness = TORNADO.THICKNESS * THREE.MathUtils.randFloat(0.8, 1.25);
+
+                    const geo = new THREE.RingGeometry(
+                        Math.max(0.01, r - thickness),
+                        r,
+                        TORNADO.SEGMENTS
+                    );
+
+                    const ring = new THREE.Mesh(geo, mat);
+                    ring.rotation.x = Math.PI / 2;
+                    ring.position.y = y;
+
+                    // store per-layer motion
+                    ring.userData.spin = THREE.MathUtils.randFloat(1.5, 4.5) * (0.6 + t); // faster near top
+                    ring.userData.phase = Math.random() * Math.PI * 2;
+                    ring.userData.wobble = THREE.MathUtils.randFloat(0.15, 0.65) * (0.4 + t);
+
+                    tornadoGroup.add(ring);
+                }
+
+                tornadoGroup.position.copy(TORNADO.POS);
+                tornadoGroup.visible = false;
+                scene.add(tornadoGroup);
+            }
+
+            function animateTornado(t){
+                if (!tornadoGroup || !tornadoGroup.visible) return;
+
+                // gentle sway
+                tornadoGroup.position.x = TORNADO.POS.x + Math.sin(t * 0.35) * 2.0;
+                tornadoGroup.position.z = TORNADO.POS.z + Math.cos(t * 0.28) * 1.2;
+
+                for (const ring of tornadoGroup.children){
+                    ring.rotation.z = Math.sin(t * 0.9 + ring.userData.phase) * 0.12;
+                    ring.rotation.y += ring.userData.spin * 0.02;
+
+                    // small circular wobble per layer
+                    const w = ring.userData.wobble;
+                    ring.position.x = Math.sin(t * 1.6 + ring.userData.phase) * w;
+                    ring.position.z = Math.cos(t * 1.6 + ring.userData.phase) * w;
+                }
+            }
+
             function applyWeather(mode){
                 weatherMode = mode;
 
@@ -477,6 +559,9 @@
                 } else if (mode === WEATHER.SNOW) {
                     skyColor = SNOW_SKY;
                     cloudColor = CLOUD_SNOW;
+                } else if (mode === WEATHER.TORNADO){
+                    skyColor = TORNADO_SKY;
+                    cloudColor = CLOUD_TORNADO;
                 }
 
                 // sky + fog match
@@ -511,14 +596,21 @@
                 if (k === "s") {
                     precipMode = (precipMode === "snow") ? "none" : "snow";
                 }
+                // tornado with 't'
+                if (k === "t"){
+                    precipMode = (precipMode === "tornado") ? "none" : "tornado";
+                }
 
                 if (snowGroup) snowGroup.visible = (precipMode === "snow");
                 if (rainGroup) rainGroup.visible = (precipMode === "rain");
+                if (tornadoGroup) tornadoGroup.visible = (precipMode === "tornado");
 
                 if (precipMode === "rain") {
                     applyWeather(WEATHER.RAIN);
                 } else if (precipMode === "snow") {
                     applyWeather(WEATHER.SNOW);
+                } else if (precipMode === "tornado") {
+                    applyWeather(WEATHER.TORNADO);
                 } else {
                     applyWeather(WEATHER.CLEAR);
                 }
@@ -628,6 +720,9 @@
                     }
                     posAttr.needsUpdate = true;
                 }
+
+                // animate tornado
+                animateTornado(t);
 
                 if (controls) controls.update();
                 renderer.render(scene, camera);
