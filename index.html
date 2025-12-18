@@ -71,7 +71,7 @@
 
             // cloud variables
             let clouds = [];
-            const NUM_CLOUDS = 500;
+            const NUM_CLOUDS = 2000;
             
             const cloudMats = [];
 
@@ -80,9 +80,11 @@
             const CLOUD_Z_HALFSPAN = 1500;
 
             const CLOUD_HEIGHT = 13.0; // typical cloud height
-            const CLOUD_HEIGHT_VARIATION = 50.0;
-            const CLOUD_SPREAD_X = 220; // how far clouds can appear to the left and right
-            const CLOUD_SPEED_Z = 18.0;
+            const CLOUD_HEIGHT_VARIATION = 350.0;
+            const CLOUD_SPREAD_X = 500; // how far clouds can appear to the left and right
+            const CLOUD_SPEED_Z = 30.0;
+            const CLOUD_SIZE_MULT = 2.6;
+            const PUFF_RADIUS_MULT = 1.8;
             let lastTime = 0; // for computing time diff between frames 
 
             // rain variables
@@ -108,7 +110,7 @@
                 POS: new THREE.Vector3(28, 0, -25)
             };
 
-            const WEATHER = { CLEAR: "clear", RAIN: "rain", SNOW: "snow", TORNADO: "tornado" };
+            const WEATHER = { CLEAR: "clear", RAIN: "rain", SNOW: "snow", TORNADO: "tornado", NIGHT: "night" };
             let weatherMode = WEATHER.CLEAR;
 
             let ambientLight, sunLight;
@@ -128,7 +130,15 @@
                 snow: { ambient: 0.22, sun: 0.80 },
                 rain: { ambient: 0.15, sun: 0.65 },
                 tornado: { ambient: 0.18, sun: 0.55 },
+                night: { ambient: 0.12, sun: 0.25 }
             };
+
+            // night variables
+            let isNight = false;
+            let stars = null;
+
+            const NIGHT_SKY = 0x03040a;
+            const CLOUD_NIGHT = 0x2a2a2a;
 
 
 
@@ -183,6 +193,90 @@
 
                 // Make sure the camera is actually looking at the center
                 camera.lookAt(center);
+            }
+
+            function makeRadialTexture(size = 256, stops = [
+                { t: 0.0, a: 1.9 },
+                { t: 0.4, a: 0.6 },
+                { t: 1.0, a: 0.0 },
+            ]) {
+                const canvas = document.createElement("canvas");
+                canvas.width = canvas.height = size;
+                const ctx = canvas.getContext("2d");
+
+                const cx = size / 2, cy = size / 2;
+                const r = size / 2;
+
+                const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
+                for (const s of stops) grad.addColorStop(s.t, `rgba(255,247,209,${s.a})`);
+                
+                ctx.fillStyle = grad;
+                ctx.fillRect(0, 0, size, size);
+
+                const tex = new THREE.CanvasTexture(canvas);
+                tex.colorSpace = THREE.SRGBColorSpace;
+                return tex;
+            }
+
+            function createSun(){
+                const sun = new THREE.Group();
+
+                // core disc
+                const coreGeo = new THREE.SphereGeometry(1.5, 32, 16);
+                const coreMat = new THREE.MeshStandardMaterial({
+                    color: 0xfff7d1,
+                    emissive: 0xfff7d1,
+                    emissiveIntensity: 1.0,
+                    depthTest: false,
+                    depthWrite: false,
+                    fog: false,
+                });
+                const core = new THREE.Mesh(coreGeo, coreMat);
+                sun.add(core);
+
+                // soft halo #1
+                const haloTex1 = makeRadialTexture(256, [
+                    { t: 0.0, a: 0.35 },
+                    { t: 0.35, a: 0.18 },
+                    { t: 1.0, a: 0.0 },
+                ]);
+
+                const haloMat1 = new THREE.MeshBasicMaterial({
+                    map: haloTex1,
+                    transparent: true,
+                    depthTest: false,
+                    depthWrite: false,
+                    fog: false,
+                    blending: THREE.AdditiveBlending,
+                });
+                const halo1 = new THREE.Mesh(new THREE.PlaneGeometry(8.0, 8.0), haloMat1);
+                halo1.renderOrder = -1001; // behind clouds but with sun group
+                sun.add(halo1);
+
+                // soft halo #2, bigger and fainter
+                const haloTex2 = makeRadialTexture(256, [
+                    { t: 0.0, a: 0.18 },
+                    { t: 0.25, a: 0.10 },
+                    { t: 1.0, a: 0.0 },
+                ]);
+
+                const haloMat2 = new THREE.MeshBasicMaterial({
+                    map: haloTex2,
+                    transparent: true,
+                    depthTest: false,
+                    depthWrite: false,
+                    fog: false,
+                    blending: THREE.AdditiveBlending,
+                });
+
+                const halo2 = new THREE.Mesh(new THREE.PlaneGeometry(14.0, 14.0), haloMat2);
+                halo2.renderOrder = -1002;
+                sun.add(halo2);
+
+                // make sure halos face the camera
+                sun.userData.billboard = [halo1, halo2];
+                sun.renderOrder = -1000;
+                return sun;
             }
 
 
@@ -250,17 +344,15 @@
 
                 applyWeather(WEATHER.CLEAR);
 
-                // sun disc
-                const sunGeo = new THREE.SphereGeometry(1.5, 32, 16);
-                const sunMat = new THREE.MeshStandardMaterial({
-                    color: 0xfff7d1,
-                    emissive: 0xfff7d1, // glow
-                    emissiveIntensity: 1.0 // brightness of glow
-                })
-                const sunDisc = new THREE.Mesh(sunGeo, sunMat);
-                // position of the sun; far away in background
-                sunDisc.position.set(-15, 20, -30);
-                scene.add(sunDisc);
+                // create sun
+                const sun = createSun();
+                sun.position.set(-15, 20, -30);
+                scene.add(sun);
+                window.__sun = sun;
+                
+                // create stars for night mode
+                stars = createStars(5000);
+                scene.add(stars);
 
                 //=============== create clouds ===============
                 // build clouds at random positions in the sky
@@ -326,6 +418,10 @@
 
                     frameObject(birdGroup, camera, controls, 3.0);
 
+                    camera.far = 8000;
+                    camera.near = Math.min(camera.near, 0.1);
+                    camera.updateProjectionMatrix();
+
                     for (const c of clouds) respawnCloud(c);
 
                     console.log("GLB loaded:", { size, center, scale });
@@ -354,7 +450,7 @@
 
                 for (let i = 0; i < numPuffs; i++) {
                     // slight varied radius fo each puff
-                    const radius = THREE.MathUtils.randFloat(0.3, 0.8);
+                    const radius = THREE.MathUtils.randFloat(0.3, 0.8) * PUFF_RADIUS_MULT;
 
                     const geo = new THREE.SphereGeometry(radius, 16, 12);
                     const mat = new THREE.MeshStandardMaterial({
@@ -383,11 +479,10 @@
                     THREE.MathUtils.randFloat(CLOUD_MIN_Z, CLOUD_MAX_Z) // random depth
                 );
 
-                cloud.scale.set(
-                    1.5 + Math.random() * 2.0, // width
-                    1.0 + Math.random() * 0.5, // height
-                    1.0 + Math.random() * 0.3 // depth
-                ); // slightly stretch cloud to get more of a cloud-effect
+                const sx = (1.5 + Math.random() * 2.0) * CLOUD_SIZE_MULT; // width
+                const sy = (1.0 + Math.random() * 0.5) * CLOUD_SIZE_MULT; // height
+                const sz = (1.0 + Math.random() * 0.3) * CLOUD_SIZE_MULT; // depth
+                cloud.scale.set(sx, sy, sz);
 
                 cloud.userData.speed = THREE.MathUtils.randFloat(0.5, 2.0); // each cloud moves at diff speeds
                 cloud.userData.dir = Math.random() < 0.5 ? -1 : 1; // left or right
@@ -400,11 +495,10 @@
                 cloud.position.y = baseBirdHeight + (Math.random() - 0.5) * CLOUD_HEIGHT_VARIATION;
                 cloud.position.z = THREE.MathUtils.randFloat(CLOUD_MIN_Z, CLOUD_MAX_Z);
 
-                cloud.scale.set(
-                    1.5 + Math.random() * 2.0,
-                    1.0 + Math.random() * 0.5,
-                    1.0 + Math.random() * 0.3
-                );
+                const sx = (1.5 + Math.random() * 2.0) * CLOUD_SIZE_MULT; // width
+                const sy = (1.0 + Math.random() * 0.5) * CLOUD_SIZE_MULT; // height
+                const sz = (1.0 + Math.random() * 0.3) * CLOUD_SIZE_MULT; // depth
+                cloud.scale.set(sx, sy, sz);
 
                 cloud.userData.speed = THREE.MathUtils.randFloat(0.5, 2.0);
                 cloud.userData.dir = Math.random() < 0.5 ? -1 : 1;
@@ -561,6 +655,51 @@
                 }
             }
 
+            function createStars(count = 4000) {
+                const geo = new THREE.BufferGeometry();
+
+                // scatter stars over big "shell" behind everything
+                const positions = new Float32Array(count * 3);
+                const sizes = new Float32Array(count);
+
+                const rMin = 1200;
+                const rMax = 2600;
+                const MIN_Y_DIR = 0.15; // higher # = fewer near horizon (0.0 = horizon line, 1.0 = straight up)
+
+                for (let i = 0; i < count; i++){
+                    const theta = Math.random() * Math.PI * 2;
+
+                    const yDir = THREE.MathUtils.lerp(MIN_Y_DIR, 1.0, Math.random());
+                    const rXZ = Math.sqrt(1 - yDir * yDir);
+
+                    const xDir = rXZ * Math.cos(theta);
+                    const zDir = rXZ * Math.sin(theta);
+                    const r = THREE.MathUtils.randFloat(rMin, rMax);
+
+                    positions[i * 3 + 0] = xDir * r;
+                    positions[i * 3 + 1] = yDir * r;
+                    positions[i * 3 + 2] = zDir * r;
+                }
+                geo.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+
+                const mat = new THREE.PointsMaterial({
+                    color: 0xffffff,
+                    size: 2.0,
+                    sizeAttenuation: false,
+                    transparent: true,
+                    opacity: 0.95,
+                    depthTest: false,
+                    depthWrite: false,
+                    fog: false,
+                });
+
+                const pts = new THREE.Points(geo, mat);
+                pts.frustumCulled = false; // avoid accidental culling issues
+                pts.renderOrder = -2000;
+                pts.visible = false;
+                return pts;
+            }
+
             function applyWeather(mode){
                 weatherMode = mode;
 
@@ -577,6 +716,9 @@
                 } else if (mode === WEATHER.TORNADO){
                     skyColor = TORNADO_SKY;
                     cloudColor = CLOUD_TORNADO;
+                } else if (mode === WEATHER.NIGHT){
+                    skyColor = NIGHT_SKY;
+                    cloudColor = CLOUD_NIGHT;
                 }
 
                 // sky + fog match
@@ -592,6 +734,10 @@
                 for (const m of cloudMats){
                     m.color.setHex(cloudColor);
                 }
+
+                // toggle stars + sun
+                if (stars) stars.visible = (mode === WEATHER.NIGHT);
+                if (window.__sun) window.__sun.visible = (mode !== WEATHER.NIGHT);
             }
 
             function onWindowResize() {
@@ -615,6 +761,10 @@
                 if (k === "t"){
                     precipMode = (precipMode === "tornado") ? "none" : "tornado";
                 }
+                // night with 'n'
+                if (k === "n"){
+                    precipMode = (precipMode === "night") ? "none" : "night";
+                }
 
                 if (snowGroup) snowGroup.visible = (precipMode === "snow");
                 if (rainGroup) rainGroup.visible = (precipMode === "rain");
@@ -626,6 +776,8 @@
                     applyWeather(WEATHER.SNOW);
                 } else if (precipMode === "tornado") {
                     applyWeather(WEATHER.TORNADO);
+                } else if (precipMode === "night") {
+                    applyWeather(WEATHER.NIGHT);
                 } else {
                     applyWeather(WEATHER.CLEAR);
                 }
@@ -740,6 +892,18 @@
 
                 // animate tornado
                 animateTornado(t);
+
+                // keep sun halos facing camera
+                if (window.__sun) {
+                    for (const p of window.__sun.userData.billboard){
+                        p.quaternion.copy(camera.quaternion);
+                    }
+                }
+
+                // twinkle the stars
+                if (stars && stars.visible) {
+                    stars.material.opacity = 0.75 + 0.20 * Math.sin(t * 0.8);
+                }
 
                 if (controls) controls.update();
                 renderer.render(scene, camera);
