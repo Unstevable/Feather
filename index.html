@@ -75,12 +75,13 @@
             
             const cloudMats = [];
 
-            let CLOUD_FAR_Z = -180;
-            let CLOUD_NEAR_Z = 0;
+            let CLOUD_MIN_Z = -1500;
+            let CLOUD_MAX_Z = 1500;
+            const CLOUD_Z_HALFSPAN = 1500;
 
             const CLOUD_HEIGHT = 13.0; // typical cloud height
             const CLOUD_HEIGHT_VARIATION = 50.0;
-            const CLOUD_SPREAD_X = 80; // how far clouds can appear to the left and right
+            const CLOUD_SPREAD_X = 220; // how far clouds can appear to the left and right
             const CLOUD_SPEED_Z = 18.0;
             let lastTime = 0; // for computing time diff between frames 
 
@@ -94,7 +95,8 @@
             let isRaining = false;
 
             // tornado variables
-            let tornadoGroup = null;
+            let tornadoes = [];
+
             const TORNADO = {
                 LAYERS: 300, // # of circular layers
                 HEIGHT: 26,
@@ -197,16 +199,19 @@
                 scene = new THREE.Scene();
 
                 // adding fog to the scene for fading distant objects
-                scene.fog = new THREE.Fog(0x87ceeb, 10, 60);
+                scene.fog = new THREE.Fog(0x87ceeb, 50, 2000);
 
                 // camera
                 const fov = 60;
                 const aspect = window.innerWidth / window.innerHeight;
                 const near = 0.1;
-                const far = 1000;
+                const far = 3000; // change this with cloud visibility
                 camera = new THREE.PerspectiveCamera(fov, aspect, near, far);
                 camera.position.set(0, 2, 6);
                 scene.add(camera);
+
+                CLOUD_MIN_Z = camera.position.z - CLOUD_Z_HALFSPAN;
+                CLOUD_MAX_Z = camera.position.z + CLOUD_Z_HALFSPAN;
 
                 // =============== audio setup ===============
                 audioListener = new THREE.AudioListener();
@@ -276,7 +281,12 @@
                 createRain();
                 //=============================================
                 //=============== create tornado =================
-                createTornado();
+                // createTornado();
+                tornadoes = [
+                    { group: createTornado(new THREE.Vector3(28, 0, -25)), pos: new THREE.Vector3(28, 0, -25), move: 1.0 },
+                    { group: createTornado(new THREE.Vector3(10, 0, -40)), pos: new THREE.Vector3(10, 0, -40), move: 0.8 },
+                    { group: createTornado(new THREE.Vector3(-18, 0, -30)), pos: new THREE.Vector3(-18, 0, -30), move: 1.2 },
+                ];
                 //=============================================
 
                 //=============== bird geometry ===============
@@ -315,9 +325,6 @@
                     baseBirdHeight = birdGroup.position.y;
 
                     frameObject(birdGroup, camera, controls, 3.0);
-
-                    CLOUD_NEAR_Z = camera.position.z + 10;
-                    CLOUD_FAR_Z = camera.position.z - 220;
 
                     for (const c of clouds) respawnCloud(c);
 
@@ -373,7 +380,7 @@
                 cloud.position.set(
                     (Math.random() - 0.5) * CLOUD_SPREAD_X, // x spread
                     CLOUD_HEIGHT + (Math.random() - 0.5) * CLOUD_HEIGHT_VARIATION, // slight y variation
-                    THREE.MathUtils.randFloat(CLOUD_FAR_Z, CLOUD_NEAR_Z) // random depth
+                    THREE.MathUtils.randFloat(CLOUD_MIN_Z, CLOUD_MAX_Z) // random depth
                 );
 
                 cloud.scale.set(
@@ -391,7 +398,7 @@
             function respawnCloud(cloud) {
                 cloud.position.x = (Math.random() - 0.5) * CLOUD_SPREAD_X;
                 cloud.position.y = baseBirdHeight + (Math.random() - 0.5) * CLOUD_HEIGHT_VARIATION;
-                cloud.position.z = THREE.MathUtils.randFloat(CLOUD_FAR_Z, CLOUD_FAR_Z + 120);
+                cloud.position.z = THREE.MathUtils.randFloat(CLOUD_MIN_Z, CLOUD_MAX_Z);
 
                 cloud.scale.set(
                     1.5 + Math.random() * 2.0,
@@ -483,8 +490,9 @@
                 scene.add(rainGroup);
             }
 
-            function createTornado() {
-                tornadoGroup = new THREE.Group();
+            function createTornado(pos) {
+                const group = new THREE.Group();
+                // tornadoGroup = new THREE.Group();
 
                 const layers = TORNADO.LAYERS;
                 const h = TORNADO.HEIGHT;
@@ -513,6 +521,8 @@
 
                     const ring = new THREE.Mesh(geo, mat);
                     ring.rotation.x = Math.PI / 2;
+
+                    ring.userData.baseY = y;
                     ring.position.y = y;
 
                     ring.userData.phase = Math.random() * Math.PI * 2;
@@ -520,32 +530,34 @@
                     ring.userData.amp = THREE.MathUtils.lerp(0.05, 3.0, t);
                     ring.userData.freq = THREE.MathUtils.lerp(0.8, 2.0, t);
 
-                    // store per-layer motion
-                    ring.userData.spin = THREE.MathUtils.randFloat(1.5, 4.5) * (0.6 + t); // faster near top
-                    ring.userData.wobble = THREE.MathUtils.randFloat(0.15, 0.65) * (0.4 + t);
-
-                    tornadoGroup.add(ring);
+                    // tornadoGroup.add(ring);
+                    group.add(ring);
                 }
 
-                tornadoGroup.position.copy(TORNADO.POS);
-                tornadoGroup.rotation.set(0, 0, 0);
-                tornadoGroup.visible = false;
-                scene.add(tornadoGroup);
+                group.position.copy(pos);
+                group.visible = false;
+                scene.add(group);
+                return group;
             }
 
             function animateTornado(t){
-                if (!tornadoGroup || !tornadoGroup.visible) return;
 
-                tornadoGroup.position.copy(TORNADO.POS);
-                tornadoGroup.rotation.set(0, 0, 0);
+                for (const tor of tornadoes) {
+                    const group = tor.group;
+                    if (!group || !group.visible) continue;
 
-                for (const ring of tornadoGroup.children){
-                    const a = ring.userData.amp;
-                    const f = ring.userData.freq;
-                    const p = ring.userData.phase;
+                    group.position.copy(tor.pos);
+                    group.rotation.set(0, 0, 0);
 
-                    ring.position.x = Math.sin(t *  f + p) * a;
-                    ring.position.z = Math.cos(t * f + p) * a * 0.6;
+                    for (const ring of group.children){
+                        const a = ring.userData.amp * (tor.move ?? 1.0);
+                        const f = ring.userData.freq;
+                        const p = ring.userData.phase;
+
+                        ring.position.x = Math.sin(t * f + p) * a;
+                        ring.position.z = Math.cos(t * f + p) * a * 0.6;
+                        ring.position.y = ring.userData.baseY;
+                    }
                 }
             }
 
@@ -606,7 +618,7 @@
 
                 if (snowGroup) snowGroup.visible = (precipMode === "snow");
                 if (rainGroup) rainGroup.visible = (precipMode === "rain");
-                if (tornadoGroup) tornadoGroup.visible = (precipMode === "tornado");
+                for (const t of tornadoes) t.group.visible = (precipMode === "tornado");
 
                 if (precipMode === "rain") {
                     applyWeather(WEATHER.RAIN);
@@ -653,8 +665,10 @@
 
                         cloud.position.x += cloud.userData.dir * cloud.userData.drift * delta;
 
-                        if (cloud.position.z > CLOUD_NEAR_Z){
-                            respawnCloud(cloud);
+                        if (cloud.position.z > CLOUD_MAX_Z){
+                            cloud.position.z = CLOUD_MIN_Z;
+                            cloud.position.x = (Math.random() - 0.5) * CLOUD_SPREAD_X;
+                            cloud.position.y = baseBirdHeight + (Math.random() - 0.5) * CLOUD_HEIGHT_VARIATION;
                         }
                     }
                 }
