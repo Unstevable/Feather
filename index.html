@@ -96,7 +96,7 @@
             // tornado variables
             let tornadoGroup = null;
             const TORNADO = {
-                LAYERS: 34,
+                LAYERS: 300, // # of circular layers
                 HEIGHT: 26,
                 BASE_RADIUS: 1.0,
                 TOP_RADIUS: 7.0,
@@ -515,15 +515,20 @@
                     ring.rotation.x = Math.PI / 2;
                     ring.position.y = y;
 
+                    ring.userData.phase = Math.random() * Math.PI * 2;
+                    // how far it drifts side to side; change middle number (lower = less movement, higher = more)
+                    ring.userData.amp = THREE.MathUtils.lerp(0.05, 3.0, t);
+                    ring.userData.freq = THREE.MathUtils.lerp(0.8, 2.0, t);
+
                     // store per-layer motion
                     ring.userData.spin = THREE.MathUtils.randFloat(1.5, 4.5) * (0.6 + t); // faster near top
-                    ring.userData.phase = Math.random() * Math.PI * 2;
                     ring.userData.wobble = THREE.MathUtils.randFloat(0.15, 0.65) * (0.4 + t);
 
                     tornadoGroup.add(ring);
                 }
 
                 tornadoGroup.position.copy(TORNADO.POS);
+                tornadoGroup.rotation.set(0, 0, 0);
                 tornadoGroup.visible = false;
                 scene.add(tornadoGroup);
             }
@@ -531,18 +536,16 @@
             function animateTornado(t){
                 if (!tornadoGroup || !tornadoGroup.visible) return;
 
-                // gentle sway
-                tornadoGroup.position.x = TORNADO.POS.x + Math.sin(t * 0.35) * 2.0;
-                tornadoGroup.position.z = TORNADO.POS.z + Math.cos(t * 0.28) * 1.2;
+                tornadoGroup.position.copy(TORNADO.POS);
+                tornadoGroup.rotation.set(0, 0, 0);
 
                 for (const ring of tornadoGroup.children){
-                    ring.rotation.z = Math.sin(t * 0.9 + ring.userData.phase) * 0.12;
-                    ring.rotation.y += ring.userData.spin * 0.02;
+                    const a = ring.userData.amp;
+                    const f = ring.userData.freq;
+                    const p = ring.userData.phase;
 
-                    // small circular wobble per layer
-                    const w = ring.userData.wobble;
-                    ring.position.x = Math.sin(t * 1.6 + ring.userData.phase) * w;
-                    ring.position.z = Math.cos(t * 1.6 + ring.userData.phase) * w;
+                    ring.position.x = Math.sin(t *  f + p) * a;
+                    ring.position.z = Math.cos(t * f + p) * a * 0.6;
                 }
             }
 
