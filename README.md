@@ -32,7 +32,15 @@ _________________________
 - Mouse Controls - Mouse Icon will be hidden, but the bird will move with your mouse location based on initial camera position
 _________________________
 ## Technical Details
-
+- WebGL and Three.js (HTML, CSS, JavaScript)
+- GLTFLoader for loading the Seagull .glb model
+- OrbitControls and a reusable frameObject() helper which calculates the object's bounds and sets the camera at an appropriate distance
+- animate() function to handle animation of the bird and weather conditions (delta time)
+- Cloud System: procedurally generated, built from multiple sphereical "puffs", randomized in size and position.
+- Multiple Weather States: each one updates the sky color and fog, cloud materials, lighting
+- Precipitation: Snow implemented as THREE.Points with per particle position updates; Rain implemented using LineSegments with length variation
+- Tornado is built from a great amount of RingGeometry layers stacked on top of one another; each layer has its own phase/amp/frequency to achieve the visceral swirling motion
+- Sun/Moon "halos" 
 
 
 
