@@ -17,6 +17,23 @@
                 height: 100%;
                 display: block;
             }
+
+            #ui-hint {
+                position: fixed;
+                top: 12px;
+                left: 12px;
+                padding: 10px 12px;
+                background: rgba(0, 0, 0, 0.45);
+                color: #ffffff;
+                font-family: system-ui, Arial, sans-serif;
+                font-size: 13px;
+                line-height: 1.4;
+                border-radius: 6px;
+                z-index: 10;
+                pointer-events: none; /* doesn't block mouse input */
+                backdrop-filter: blur(4px);
+            }
+
         </style>
         <!-- NEW: Import map so addons can resolve `import ... from 'three'` -->
         <script type="importmap">
@@ -31,6 +48,17 @@
     </head>
     <body>
         <canvas id="c"></canvas>
+
+        <div id="ui-hint">
+            <strong>Controls</strong><br>
+            R – Rain<br>
+            S – Snow<br>
+            T – Tornado<br>
+            N – Night<br>
+            M – Music<br>
+            Mouse – Move Bird
+        </div>
+
 
         <script type="module">
             // three.js imports
