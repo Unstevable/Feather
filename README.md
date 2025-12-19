@@ -1,1 +1,3 @@
-Final Project for CS460 Graphics (edit this to explain in detail)
+# Feather: A Three.JS Visualization Project & Tribute to Nujabes
+
+
