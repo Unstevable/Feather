@@ -7,6 +7,7 @@ _________________________
 3. [Features](#features)
 4. [Technical Details](#technical-details)
 5. [How to Run](#how-to-run)
+6. [Licenses & Acknowledgements](#licenses--acknowledgements)
 _________________________
 ## Project Overview
 For our course, we had to choose between two "tracks": a track based on the UMass Boston Nursing Caves or a track based on the WNDR Museum in Boston - this project is based on the exhibits seen at the WNDR Museum.  Specifically, there was an exhibit I believe named "Inside Out", where you sit in a simulated house and experience weather effects all around you.  I enjoyed how the weather effects were simulated with different WebGL visual elements and wanted to take certain inspirations from it.  I had my idea for this project when listening to the artist Nujabes (Rest In Peace), specifically his song "Feather" and I came up with an idea to have a bird flying through a sky while this song plays in the background, to try to visualize the feeling that his music and specifically this song evokes in me.
@@ -49,10 +50,8 @@ _________________________
 ## How to Run
 You can run this software right in your browser window by visiting my live GitHub Pages link here: [Feather Live Website](https://unstevable.github.io/Feather/).  If you were to download the necessary files to run (the only NEEDED files are my `Seagull.glb` and `index.html` files) I ran the files locally using a python local server.  If you have python installed on your device, I initiate a python server (on Windows) by opening my terminal, navigating to the root directory of my project, and using this at command line: `python -m http.server 8000`.  This allows you to visit `http://localhost:8000` to view the visualization in your browser locally.  Another option is to use Visual Studio Code, and while you are in the `index.html` file, click "Show Preview" in the top-right of the IDE window and it should populate a new window running the visualization.
 _________________________
-
-
-
-
-
-
-
+## Licenses & Acknowledgements
+Flying seagull by Poly by Google [CC-BY] (https://creativecommons.org/licenses/by/3.0/) via Poly Pizza (https://poly.pizza/m/6Tpj_vcWP3f).
+This was a free download, and all rights are reserved by the original creator.  The original file I downloaded is the file in this repository named `Flying_seagull.glb` - however, when I initially downloaded this file, the entire bird was one object.  I imported this model into Blender, where I edited it such that the wings of the bird could separate from the body to allow for the wing animation to simulate flying.  My version of the file is named `Seagull.glb`.
+I do not own the song "Feather" by Nujabes.  All rights are reserved by the current owners of the music, and I am not making any profit from this visualization, as it is designed for an academic project.
+I used ChatGPT to assist with properly importing the bird model, along with a vareity of math equations to get certain animations and functions correct.
