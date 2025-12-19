@@ -32,6 +32,7 @@ _________________________
 - `N` key - Night State
 - `M` key - Music Initiation/Muting
 - `Mouse Controls` - Mouse Icon will be hidden, but the bird will move with your mouse location based on initial camera position
+- `Camera Movement` - Click and hold while moving your mouse to rotate the camera
 _________________________
 ## Technical Details
 - `WebGL` and `Three.js` (`HTML`, `CSS`, `JavaScript`)
