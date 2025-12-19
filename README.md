@@ -16,6 +16,17 @@ With "t", you can transition into a state with tornadoes.
 Finally, with "n", you can transition into a night scene.
 <img width="1920" height="913" alt="DemoNightPic" src="https://github.com/user-attachments/assets/f4cb88d3-3ab8-4eff-90a3-658212967548" />
 Some things that are unable to be captured with a picture: you can also toggle "m" to start playing "Feather" by Nujabes in the background, and pressing "m" mutes the music (the music keeps playing, however!).  The user can also move the bird around using their mouse location, however the positioning is based on the original camera position, so if you turn the camera around so you can view behind the bird, moving the mouse may result in weird movement of the bird - for it to be more accurate to your mouse position, you would need to face the camera back to how it loaded, which is looking ahead of the bird.  Once in any of the scene states, you can toggle that same key (if you're in a rainy state, toggle "r" again) to return back to the "clean" state, with only the clouds, sun and a "clear" sky.
+_________________________
+## Features
+### - "R" key - Rain State
+### - "S" key - Snow State
+### - "T" key - Tornado State
+### - "N" key - Night State
+### - "M" key - Music Initiation/Muting
+### - Mouse Controls - Mouse Icon will be hidden, but the bird will move with your mouse location based on initial camera position
+_________________________
+
+
 
 
 
