@@ -46,7 +46,7 @@ _________________________
 - Hotkey shortcuts for the different weather states; hidden cursor while the application is running for a more submersive experience
 _________________________
 ## How to Run
-You can run this software right in your browser window by visiting my live GitHub Pages link here: [Feather Live Website](unstevable.github.io/Feather/)
+You can run this software right in your browser window by visiting my live GitHub Pages link here: [Feather Live Website](https://unstevable.github.io/Feather/)
 
 
 
