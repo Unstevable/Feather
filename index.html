@@ -61,6 +61,23 @@
             const FLAP_AMPLITUDE = Math.PI / 6; // max wing rotation angle
             const BOB_SPEED = 1.5; // bobbing speed for bird
             const BOB_AMPLITUDE = 0.6; // bobbing height
+            // ===== mouse-follow bird movement =====
+            const mouseNDC = new THREE.Vector2(0, 0);     // -1..+1 range
+            let baseBirdPos = new THREE.Vector3(0, 0, 0); // bird rest position (x,y,z)
+
+            const FOLLOW = {
+                maxX: 12,        // how far left/right the bird can move
+                maxY: 4,         // how far up/down (added on top of bobbing)
+                maxZ: 8,         // how far forward/back (optional depth drift)
+                strength: 6.0,   // higher = snappier follow, lower = floatier
+                zone: {          // only follow mouse inside this screen box
+                    x0: 0.15, x1: 0.85,
+                    y0: 0.15, y1: 0.85
+                },
+                tiltRoll: 0.35,  // radians (bank left/right)
+                tiltPitch: 0.18  // radians (nose up/down)
+            };
+
 
             
 
@@ -82,7 +99,7 @@
             const CLOUD_HEIGHT = 13.0; // typical cloud height
             const CLOUD_HEIGHT_VARIATION = 350.0;
             const CLOUD_SPREAD_X = 500; // how far clouds can appear to the left and right
-            const CLOUD_SPEED_Z = 30.0;
+            const CLOUD_SPEED_Z = 75.0;
             const CLOUD_SIZE_MULT = 2.6;
             const PUFF_RADIUS_MULT = 1.8;
             let lastTime = 0; // for computing time diff between frames 
@@ -457,9 +474,13 @@
                 //=============== create tornado =================
                 // createTornado();
                 tornadoes = [
-                    { group: createTornado(new THREE.Vector3(28, 0, -25)), pos: new THREE.Vector3(28, 0, -25), move: 1.0 },
-                    { group: createTornado(new THREE.Vector3(10, 0, -40)), pos: new THREE.Vector3(10, 0, -40), move: 0.8 },
-                    { group: createTornado(new THREE.Vector3(-18, 0, -30)), pos: new THREE.Vector3(-18, 0, -30), move: 1.2 },
+                    { group: createTornado(new THREE.Vector3(28, 0, -25)), pos: new THREE.Vector3(28, 0, -25), move: 1.0 }, // the first three tornadoes correspond to the three directly 
+                    { group: createTornado(new THREE.Vector3(10, 0, -40)), pos: new THREE.Vector3(10, 0, -40), move: 0.8 }, // ahead of the bird.  top one is more right
+                    { group: createTornado(new THREE.Vector3(-18, 0, -30)), pos: new THREE.Vector3(-18, 0, -30), move: 1.2 }, // this one is more left. move => higher = more 'violent' tornado; lower = more normal
+                    { group: createTornado(new THREE.Vector3(-34, 0, 0)), pos: new THREE.Vector3(-34, 0, 0), move: 1.7 },
+                    { group: createTornado(new THREE.Vector3(42, 0, 7)), pos: new THREE.Vector3(42, 0, 7), move: 0.5 },
+                    { group: createTornado(new THREE.Vector3(25, 0, 29)), pos: new THREE.Vector3(25, 0, 29), move: 1.3 },
+                    { group: createTornado(new THREE.Vector3(-34, 0, 0)), pos: new THREE.Vector3(-34, 0, 17), move: 2.4 },
                 ];
                 //=============================================
 
@@ -497,6 +518,7 @@
                     const BIRD_HEIGHT = 13.0;
                     birdGroup.position.set(0, BIRD_HEIGHT, 0);
                     baseBirdHeight = birdGroup.position.y;
+                    baseBirdPos.copy(birdGroup.position);
 
                     frameObject(birdGroup, camera, controls, 3.0);
 
@@ -521,6 +543,30 @@
 
                 // listen for keypress to toggle rain
                 window.addEventListener('keydown', onKeyDown);
+
+                window.addEventListener("pointermove", (e) => {
+                const w = window.innerWidth;
+                const h = window.innerHeight;
+
+                const u = e.clientX / w; // 0..1
+                const v = e.clientY / h; // 0..1
+
+                // Only respond if mouse is inside the “control box”
+                const inside =
+                    (u >= FOLLOW.zone.x0 && u <= FOLLOW.zone.x1 &&
+                    v >= FOLLOW.zone.y0 && v <= FOLLOW.zone.y1);
+
+                if (!inside) {
+                    // drift back toward center when mouse leaves the zone
+                    mouseNDC.set(0, 0);
+                    return;
+                }
+
+                // Convert to NDC: x -1..+1, y -1..+1 (invert Y so up is +)
+                mouseNDC.x = (u * 2 - 1);
+                mouseNDC.y = -(v * 2 - 1);
+                });
+
             }
 
             // function to create clouds
@@ -977,9 +1023,27 @@
                 // ----- bird bobbing and flapping -----
                 if (birdLoaded && birdGroup) {
                     const bob = Math.sin(t * BOB_SPEED) * BOB_AMPLITUDE;
-                    birdGroup.position.y = baseBirdHeight + bob;
 
+                    // Target position around the bird’s base position
+                    const targetX = baseBirdPos.x + mouseNDC.x * FOLLOW.maxX;
+                    const targetZ = baseBirdPos.z + mouseNDC.y * FOLLOW.maxZ;
+                    const targetY = baseBirdHeight + bob + mouseNDC.y * FOLLOW.maxY;
+
+                    // Smooth follow (frame-rate independent)
+                    const alpha = 1.0 - Math.exp(-FOLLOW.strength * delta);
+
+                    birdGroup.position.x = THREE.MathUtils.lerp(birdGroup.position.x, targetX, alpha);
+                    birdGroup.position.y = THREE.MathUtils.lerp(birdGroup.position.y, targetY, alpha);
+                    birdGroup.position.z = THREE.MathUtils.lerp(birdGroup.position.z, targetZ, alpha);
+
+                    // Small tilt so it feels like steering
+                    const rollTarget  = -mouseNDC.x * FOLLOW.tiltRoll;
+                    const pitchTarget =  mouseNDC.y * FOLLOW.tiltPitch;
+
+                    birdGroup.rotation.z = THREE.MathUtils.lerp(birdGroup.rotation.z, rollTarget, alpha);
+                    birdGroup.rotation.x = THREE.MathUtils.lerp(birdGroup.rotation.x, pitchTarget, alpha);
                 }
+
 
                 if (leftwing && rightwing) {
                     leftwing.rotation.x = baseLeftWingRoot + flapOffset;
