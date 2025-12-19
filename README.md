@@ -40,7 +40,13 @@ _________________________
 - Multiple Weather States: each one updates the sky color and fog, cloud materials, lighting
 - Precipitation: Snow implemented as THREE.Points with per particle position updates; Rain implemented using LineSegments with length variation
 - Tornado is built from a great amount of RingGeometry layers stacked on top of one another; each layer has its own phase/amp/frequency to achieve the visceral swirling motion
-- Sun/Moon "halos" 
+- Sun/Moon "halos" created using small canvas radial gradient, rendered with AdditiveBlending
+- Audio Integration: uses THREE.AudioListener, THREE.Audio, AudioLoader
+- BufferGeometry for large particle counts
+- Hotkey shortcuts for the different weather states; hidden cursor while the application is running for a more submersive experience
+_________________________
+## How to Run
+You can run this software right in your browser window by visiting my live GitHub Pages link here: [Feather Live Website](unstevable.github.io/Feather/)
 
 
 
