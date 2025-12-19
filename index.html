@@ -4,6 +4,7 @@
         <meta charset="UTF-8">
         <title>Feather</title>
 
+        <!-- CSS Styling -->
         <style>
             html, body {
             margin: 0;
@@ -16,8 +17,10 @@
                 width: 100%;
                 height: 100%;
                 display: block;
+                cursor: none; /* hide the mouse icon */
             }
 
+            /* Small UI Control Panel */
             #ui-hint {
                 position: fixed;
                 top: 12px;
@@ -35,7 +38,7 @@
             }
 
         </style>
-        <!-- NEW: Import map so addons can resolve `import ... from 'three'` -->
+
         <script type="importmap">
         {
         "imports": {
@@ -49,6 +52,7 @@
     <body>
         <canvas id="c"></canvas>
 
+        <!-- UI control panel content -->
         <div id="ui-hint">
             <strong>Controls</strong><br>
             R – Rain<br>
@@ -69,35 +73,38 @@
 
             // basic setup
             let renderer, scene, camera, controls;
-            let birdGroup, birdBody;
+
+            // bird variables
+            let birdGroup;
             let modelRoot = null;
             let leftwing = null;
             let rightwing = null;
             let baseLeftWingRoot = 0;
             let baseRightWingRoot = 0;
             let birdLoaded = false;
-
-            // audio variables
-            let audioListener, backgroundMusic; // audioListener are is the "ears" in the scene
-            let musicLoaded = false;
-            let musicVolume = 0.4;
-            let musicMuted = false;
-
-            // bird animation parameters
-            const clock = new THREE.Clock(); // clock to give elapsed time in seconds
+            let baseBirdHeight = 0;
             const FLAP_SPEED = 4.0;
             const FLAP_AMPLITUDE = Math.PI / 6; // max wing rotation angle
             const BOB_SPEED = 1.5; // bobbing speed for bird
             const BOB_AMPLITUDE = 0.6; // bobbing height
+
+            const clock = new THREE.Clock(); // clock to give elapsed time in seconds
+
+            // audio variables
+            let audioListener, backgroundMusic; // audioListener is the "ears" in the scene
+            let musicLoaded = false;
+            let musicVolume = 0.4;
+            let musicMuted = false;
+
             // ===== mouse-follow bird movement =====
-            const mouseNDC = new THREE.Vector2(0, 0);     // -1..+1 range
+            const mouseNDC = new THREE.Vector2(0, 0);    
             let baseBirdPos = new THREE.Vector3(0, 0, 0); // bird rest position (x,y,z)
 
             const FOLLOW = {
                 maxX: 12,        // how far left/right the bird can move
                 maxY: 4,         // how far up/down (added on top of bobbing)
                 maxZ: 8,         // how far forward/back (optional depth drift)
-                strength: 6.0,   // higher = snappier follow, lower = floatier
+                strength: 2.0,   // higher = snappier follow, lower = floatier
                 zone: {          // only follow mouse inside this screen box
                     x0: 0.15, x1: 0.85,
                     y0: 0.15, y1: 0.85
@@ -105,14 +112,6 @@
                 tiltRoll: 0.35,  // radians (bank left/right)
                 tiltPitch: 0.18  // radians (nose up/down)
             };
-
-
-            
-
-            // store the "rest" position of the bird to animate around it
-            let baseLeftWingAngle = 0;
-            let baseRightWingAngle = 0;
-            let baseBirdHeight = 0;
 
             // cloud variables
             let clouds = [];
@@ -136,10 +135,9 @@
             let precipMode = "none"; // none || snow || rain
             let snowGroup = null;
             let rainGroup = null;
-            const RAIN_COUNT = 500;
+            const RAIN_COUNT = 750;
             const RAIN_AREA_XZ = 40; // how wide/deep the rain area is
-            const RAIN_HEIGHT = 12; // how high above the scene raindrops start
-            let isRaining = false;
+            const RAIN_HEIGHT = 18; // how high above the scene raindrops start
 
             // tornado variables
             let tornadoes = [];
@@ -155,6 +153,7 @@
                 POS: new THREE.Vector3(28, 0, -25)
             };
 
+            // weather states
             const WEATHER = { CLEAR: "clear", RAIN: "rain", SNOW: "snow", TORNADO: "tornado", NIGHT: "night" };
             let weatherMode = WEATHER.CLEAR;
 
@@ -189,9 +188,9 @@
                 ambient: LIGHTS.clear.ambient,
                 sun: LIGHTS.clear.sun,
                 sunColor: new THREE.Color(SUN_LIGHT_COLOR),
-                stars: 0, // 0..1
-                sunVis: 1, // 0..1
-                moonVis: 0 // 0..1
+                stars: 0, 
+                sunVis: 1,
+                moonVis: 0
             };
 
             const weatherTarget = {
@@ -210,7 +209,6 @@
 
 
             // night variables
-            let isNight = false;
             let stars = null;
 
             const NIGHT_SKY = 0x03040a;
@@ -222,7 +220,7 @@
             // shooting star vars
             let shootingStars = [];
             const SHOOTING_STAR_COUNT = 8;      // pool size
-            let shootingStarTimer = 0;
+            
 
             const SHOOTING = {
                 spawnChancePerSec: 1,          // made it high for more frequent shooting stars
@@ -236,10 +234,6 @@
                 rMin: 1200,
                 rMax: 2600,
             };
-
-
-
-
 
             init();
             animate();
@@ -427,8 +421,6 @@
                 return moon;
             }
 
-
-
             function init() {
                 const canvas = document.getElementById("c");
 
@@ -518,17 +510,17 @@
                 }
                 //=============================================
 
-                //=============== create snow ===============
+                //=============== create snow & rain===============
                 createSnow();
                 if (snowGroup) {
                     snowGroup.visible = false; // start with no snow
                 }
-                //=============================================
-                //=============== create rain =================
+
                 createRain();
+
                 //=============================================
+
                 //=============== create tornado =================
-                // createTornado();
                 tornadoes = [
                     { group: createTornado(new THREE.Vector3(28, 0, -25)), pos: new THREE.Vector3(28, 0, -25), move: 1.0 }, // the first three tornadoes correspond to the three directly 
                     { group: createTornado(new THREE.Vector3(10, 0, -40)), pos: new THREE.Vector3(10, 0, -40), move: 0.8 }, // ahead of the bird.  top one is more right
@@ -546,7 +538,7 @@
 
                 const loader = new GLTFLoader();
                 loader.load(
-                "Seagull.glb", 
+                "Seagull.glb", // my personal altered seagull file
                 (gltf) => {
                     const model = gltf.scene;
                     birdGroup.add(model);
@@ -566,16 +558,17 @@
                     const center = box.getCenter(new THREE.Vector3());
                     const size = box.getSize(new THREE.Vector3());
                     model.position.sub(center);
+                    // scale the object
                     const scale = 2.0 / Math.max(size.x, size.y, size.z);
                     model.scale.setScalar(scale);
                     model.rotation.y += 1.5;
 
-                    // place bird where your scene expects it
                     const BIRD_HEIGHT = 13.0;
                     birdGroup.position.set(0, BIRD_HEIGHT, 0);
                     baseBirdHeight = birdGroup.position.y;
                     baseBirdPos.copy(birdGroup.position);
 
+                    // proper scene framing
                     frameObject(birdGroup, camera, controls, 3.0);
 
                     camera.far = 8000;
@@ -584,10 +577,10 @@
 
                     for (const c of clouds) respawnCloud(c);
 
-                    console.log("GLB loaded:", { size, center, scale });
+                    console.log("GLB loaded:", { size, center, scale }); // for debugging
                 },
                 undefined,
-                (err) => console.error("GLB load error:", err)
+                (err) => console.error("GLB load error:", err) // for debugging
                 );
 
                 scene.add(birdGroup);
@@ -604,8 +597,8 @@
                 const w = window.innerWidth;
                 const h = window.innerHeight;
 
-                const u = e.clientX / w; // 0..1
-                const v = e.clientY / h; // 0..1
+                const u = e.clientX / w; 
+                const v = e.clientY / h; 
 
                 // Only respond if mouse is inside the “control box”
                 const inside =
@@ -690,11 +683,10 @@
 
             }
 
-
-            // function for the snow
+            // function for the snow ( this was originally designed for the rain mode so there may be variable overlap )
             function createSnow() {
                 snowGroup = new THREE.Group();
-                // buffer geometry to hold positions of all raindrops
+                // buffer geometry to hold positions of all snowflakes
                 const positions = new Float32Array(RAIN_COUNT * 3);
 
                 for (let i = 0; i < RAIN_COUNT; i++) {
@@ -723,6 +715,7 @@
                 scene.add(snowGroup);
             }
 
+            // function for the rain
             function createRain(){
                 rainGroup = new THREE.Group();
 
@@ -768,6 +761,7 @@
                 scene.add(rainGroup);
             }
 
+            // function for tornadoes
             function createTornado(pos) {
                 const group = new THREE.Group();
                 // tornadoGroup = new THREE.Group();
@@ -808,7 +802,6 @@
                     ring.userData.amp = THREE.MathUtils.lerp(0.05, 3.0, t);
                     ring.userData.freq = THREE.MathUtils.lerp(0.8, 2.0, t);
 
-                    // tornadoGroup.add(ring);
                     group.add(ring);
                 }
 
@@ -819,7 +812,6 @@
             }
 
             function animateTornado(t){
-
                 for (const tor of tornadoes) {
                     const group = tor.group;
                     if (!group || !group.visible) continue;
@@ -925,7 +917,7 @@
             }
 
             function randomSkyPointAboveHorizon() {
-                // Similar to your star distribution: pick a direction with y >= SHOOTING.yDirMin
+                // similar to the star distribution: pick a direction with y >= SHOOTING.yDirMin
                 const theta = Math.random() * Math.PI * 2;
 
                 const yDir = THREE.MathUtils.lerp(SHOOTING.yDirMin, 1.0, Math.random());
@@ -953,7 +945,7 @@
                 // start point in the sky
                 s.userData.pos.copy(randomSkyPointAboveHorizon());
 
-                // choose a direction: generally "down-right" across the sky
+                // choose a direction
                 // (tweak these ranges for a different vibe)
                 const dir = new THREE.Vector3(
                     THREE.MathUtils.randFloat(0.6, 1.0),
@@ -1172,7 +1164,6 @@
                     }
                 }
 
-
                 // twinkle the stars
                 if (stars && stars.visible) {
                     stars.material.opacity = 0.75 + 0.20 * Math.sin(t * 0.8);
@@ -1221,7 +1212,7 @@
                     }
                 }
 
-                // ===== fade weather each frame =====
+                // fade weather each frame
                 const a = 1.0 - Math.exp(-WEATHER_FADE_SPEED * delta);
 
                 // colors
@@ -1247,7 +1238,7 @@
                 sunLight.intensity = weatherNow.sun;
                 sunLight.color.copy(weatherNow.sunColor);
 
-                // cloud recolor (only if you want clouds to fade too)
+                // cloud recolor
                 for (const m of cloudMats) m.color.copy(weatherNow.cloud);
 
                 // stars fade (instead of hard visible on/off)
@@ -1256,7 +1247,7 @@
                     stars.material.opacity = (0.6 + 0.2 * Math.sin(t * 0.8)) * weatherNow.stars;
                 }
 
-                // sun/moon fade (simple approach: fade their materials)
+                // sun/moon fade (fade their materials)
                 if (window.__sun) {
                     window.__sun.visible = weatherNow.sunVis > 0.01;
                     window.__sun.traverse(o => { if (o.material && "opacity" in o.material) { o.material.transparent = true; o.material.opacity = weatherNow.sunVis; } });
