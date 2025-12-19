@@ -150,15 +150,43 @@
                 night: { ambient: 0.12, sun: 0.25 }
             };
 
+            const SUN_LIGHT_COLOR = 0xfff2cc;
+            const MOON_LIGHT_COLOR = 0xbfd9ff;   // cool moonlight tint
+
+            // ===== smooth weather transitions =====
+            const weatherNow = {
+                sky: new THREE.Color(CLEAR_SKY),
+                fog: new THREE.Color(CLEAR_SKY),
+                cloud: new THREE.Color(CLOUD_CLEAR),
+                ambient: LIGHTS.clear.ambient,
+                sun: LIGHTS.clear.sun,
+                sunColor: new THREE.Color(SUN_LIGHT_COLOR),
+                stars: 0, // 0..1
+                sunVis: 1, // 0..1
+                moonVis: 0 // 0..1
+            };
+
+            const weatherTarget = {
+                sky: new THREE.Color(CLEAR_SKY),
+                fog: new THREE.Color(CLEAR_SKY),
+                cloud: new THREE.Color(CLOUD_CLEAR),
+                ambient: LIGHTS.clear.ambient,
+                sun: LIGHTS.clear.sun,
+                sunColor: new THREE.Color(SUN_LIGHT_COLOR),
+                stars: 0,
+                sunVis: 1,
+                moonVis: 0
+            };
+
+            const WEATHER_FADE_SPEED = 1.5; // bigger = faster fade
+
+
             // night variables
             let isNight = false;
             let stars = null;
 
             const NIGHT_SKY = 0x03040a;
             const CLOUD_NIGHT = 0x2a2a2a;
-
-            const SUN_LIGHT_COLOR = 0xfff2cc;
-            const MOON_LIGHT_COLOR = 0xbfd9ff;   // cool moonlight tint
 
             const MOON_CORE_COLOR = 0xe9f2ff;    // pale moon surface
             const MOON_HALO_COLOR = { r: 185, g: 215, b: 255 }; // bluish glow
@@ -910,57 +938,32 @@
                 s.visible = true;
             }
 
-
-            function applyWeather(mode){
+            function applyWeather(mode) {
                 weatherMode = mode;
 
-                // pick colors for the clouds and sky
                 let skyColor = CLEAR_SKY;
                 let cloudColor = CLOUD_CLEAR;
 
-                if (mode === WEATHER.RAIN) {
-                    skyColor = RAIN_SKY;
-                    cloudColor = CLOUD_RAIN;
-                } else if (mode === WEATHER.SNOW) {
-                    skyColor = SNOW_SKY;
-                    cloudColor = CLOUD_SNOW;
-                } else if (mode === WEATHER.TORNADO){
-                    skyColor = TORNADO_SKY;
-                    cloudColor = CLOUD_TORNADO;
-                } else if (mode === WEATHER.NIGHT){
-                    skyColor = NIGHT_SKY;
-                    cloudColor = CLOUD_NIGHT;
-                }
+                if (mode === WEATHER.RAIN) { skyColor = RAIN_SKY; cloudColor = CLOUD_RAIN; }
+                else if (mode === WEATHER.SNOW) { skyColor = SNOW_SKY; cloudColor = CLOUD_SNOW; }
+                else if (mode === WEATHER.TORNADO) { skyColor = TORNADO_SKY; cloudColor = CLOUD_TORNADO; }
+                else if (mode === WEATHER.NIGHT) { skyColor = NIGHT_SKY; cloudColor = CLOUD_NIGHT; }
 
-                // sky + fog match
-                renderer.setClearColor(skyColor, 1);
-                scene.fog.color.setHex(skyColor);
-
-                // lighting
                 const L = LIGHTS[mode];
-                ambientLight.intensity = L.ambient;
-                sunLight.intensity = L.sun;
-
-                // clouds recolor
-                for (const m of cloudMats){
-                    m.color.setHex(cloudColor);
-                }
-
                 const nightOn = (mode === WEATHER.NIGHT);
 
-                // toggle stars + sun
-                if (stars) stars.visible = nightOn;
-                // toggle shooting stars visibility (only meaningful at night)
-                for (const s of shootingStars) {
-                    s.visible = false;
-                    s.userData.active = false;
-                    s.material.opacity = 0.0;
-                }
+                // set TARGETS only
+                weatherTarget.sky.setHex(skyColor);
+                weatherTarget.fog.setHex(skyColor);
+                weatherTarget.cloud.setHex(cloudColor);
 
-                if (window.__sun) window.__sun.visible = (mode !== WEATHER.NIGHT);
-                if (window.__moon) window.__moon.visible = nightOn;
+                weatherTarget.ambient = L.ambient;
+                weatherTarget.sun = L.sun;
+                weatherTarget.sunColor.setHex(nightOn ? MOON_LIGHT_COLOR : SUN_LIGHT_COLOR);
 
-                sunLight.color.setHex(nightOn ? MOON_LIGHT_COLOR : SUN_LIGHT_COLOR);
+                weatherTarget.stars = nightOn ? 1 : 0;
+                weatherTarget.sunVis = nightOn ? 0 : 1;
+                weatherTarget.moonVis = nightOn ? 1 : 0;
             }
 
             function onWindowResize() {
@@ -1133,14 +1136,7 @@
 
                 // animate tornado
                 animateTornado(t);
-
-                // keep sun halos facing camera
-                // if (window.__sun) {
-                //     for (const p of window.__sun.userData.billboard){
-                //         p.quaternion.copy(camera.quaternion);
-                //     }
-                // }
-                // keep sun + moon halos facing camera
+                // sun and moon
                 for (const obj of [window.__sun, window.__moon]) {
                     if (!obj || !obj.userData.billboard) continue;
                     for (const p of obj.userData.billboard) {
@@ -1197,6 +1193,50 @@
                     }
                 }
 
+                // ===== fade weather each frame =====
+                const a = 1.0 - Math.exp(-WEATHER_FADE_SPEED * delta);
+
+                // colors
+                weatherNow.sky.lerp(weatherTarget.sky, a);
+                weatherNow.fog.lerp(weatherTarget.fog, a);
+                weatherNow.cloud.lerp(weatherTarget.cloud, a);
+
+                // intensities
+                weatherNow.ambient = THREE.MathUtils.lerp(weatherNow.ambient, weatherTarget.ambient, a);
+                weatherNow.sun = THREE.MathUtils.lerp(weatherNow.sun, weatherTarget.sun, a);
+
+                // sun/moon color + visibility fades
+                weatherNow.sunColor.lerp(weatherTarget.sunColor, a);
+                weatherNow.stars = THREE.MathUtils.lerp(weatherNow.stars, weatherTarget.stars, a);
+                weatherNow.sunVis = THREE.MathUtils.lerp(weatherNow.sunVis, weatherTarget.sunVis, a);
+                weatherNow.moonVis = THREE.MathUtils.lerp(weatherNow.moonVis, weatherTarget.moonVis, a);
+
+                // APPLY to renderer/scene
+                renderer.setClearColor(weatherNow.sky, 1);
+                scene.fog.color.copy(weatherNow.fog);
+
+                ambientLight.intensity = weatherNow.ambient;
+                sunLight.intensity = weatherNow.sun;
+                sunLight.color.copy(weatherNow.sunColor);
+
+                // cloud recolor (only if you want clouds to fade too)
+                for (const m of cloudMats) m.color.copy(weatherNow.cloud);
+
+                // stars fade (instead of hard visible on/off)
+                if (stars) {
+                    stars.visible = weatherNow.stars > 0.01;
+                    stars.material.opacity = (0.6 + 0.2 * Math.sin(t * 0.8)) * weatherNow.stars;
+                }
+
+                // sun/moon fade (simple approach: fade their materials)
+                if (window.__sun) {
+                    window.__sun.visible = weatherNow.sunVis > 0.01;
+                    window.__sun.traverse(o => { if (o.material && "opacity" in o.material) { o.material.transparent = true; o.material.opacity = weatherNow.sunVis; } });
+                }
+                if (window.__moon) {
+                    window.__moon.visible = weatherNow.moonVis > 0.01;
+                    window.__moon.traverse(o => { if (o.material && "opacity" in o.material) { o.material.transparent = true; o.material.opacity = weatherNow.moonVis; } });
+                }
 
                 if (controls) controls.update();
                 renderer.render(scene, camera);
